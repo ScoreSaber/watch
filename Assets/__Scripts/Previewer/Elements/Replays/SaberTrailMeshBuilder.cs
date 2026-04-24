@@ -13,6 +13,68 @@ public class SaberTrailMeshBuilder : MonoBehaviour
     private Vector3[] vertices;
     private Vector2[] uvs;
     private int[] triangles;
+    private int currentSegmentCount = -1;
+    private bool meshAssigned;
+
+
+    private void EnsureMeshAssigned()
+    {
+        if(meshAssigned)
+        {
+            return;
+        }
+
+        mesh.MarkDynamic();
+        meshFilter.mesh = mesh;
+        meshAssigned = true;
+    }
+
+
+    private bool EnsureBuffers(int segmentCount)
+    {
+        if(segmentCount == currentSegmentCount)
+        {
+            return false;
+        }
+
+        currentSegmentCount = segmentCount;
+        mesh.Clear();
+
+        vertices = new Vector3[segmentCount * 2];
+        uvs = new Vector2[vertices.Length];
+
+        int faceCount = segmentCount - 1;
+        int triangleCount = faceCount * 2;
+        triangles = new int[triangleCount * 3];
+
+        for(int i = 0; i < segmentCount; i++)
+        {
+            int handleIndex = i * 2;
+            int tipIndex = handleIndex + 1;
+
+            //UVs don't reach fully to the top/bottom because there're weird artifacts
+            //for some reason
+            float uvX = (float)i / segmentCount;
+            uvs[handleIndex] = new Vector2(uvX, 0f);
+            uvs[tipIndex] = new Vector2(uvX, 1f);
+
+            if(i < segmentCount - 1)
+            {
+                //Add triangles linking to the next segment
+                int bottomIndex = handleIndex * 3;
+                triangles[bottomIndex] = handleIndex;
+                triangles[bottomIndex + 1] = handleIndex + 1;
+                triangles[bottomIndex + 2] = handleIndex + 2;
+
+                int topIndex = tipIndex * 3;
+                triangles[topIndex] = tipIndex;
+                triangles[topIndex + 1] = tipIndex + 1;
+                triangles[topIndex + 2] = tipIndex + 2;
+            }
+        }
+
+        return true;
+    }
 
 
     public void SetFrames(List<ReplayFrame> frames, int startIndex)
@@ -22,13 +84,8 @@ public class SaberTrailMeshBuilder : MonoBehaviour
         int segmentCount = Mathf.Clamp(SettingsManager.GetInt("sabertrailsegments"), 10, 100);
         float segmentLength = lifetime / segmentCount;
 
-        mesh.Clear();
-        vertices = new Vector3[segmentCount * 2];
-        uvs = new Vector2[vertices.Length];
-
-        int faceCount = segmentCount - 1;
-        int triangleCount = faceCount * 2;
-        triangles = new int[triangleCount * 3];
+        EnsureMeshAssigned();
+        bool meshStructureChanged = EnsureBuffers(segmentCount);
 
         int frameIndex = startIndex;
         for(int i = 0; i < segmentCount; i++)
@@ -75,33 +132,15 @@ public class SaberTrailMeshBuilder : MonoBehaviour
 
             vertices[handleIndex] = saberPosition + handlePoint;
             vertices[tipIndex] = saberPosition + tipPoint;
-
-            //UVs don't reach fully to the top/bottom because there're weird artifacts
-            //for some reason
-            float uvX = (float)i / segmentCount;
-            uvs[handleIndex] = new Vector2(uvX, 0f);
-            uvs[tipIndex] = new Vector2(uvX, 1f);
-
-            if(i < segmentCount - 1)
-            {
-                //Add triangles linking to the next segment
-                int bottomIndex = handleIndex * 3;
-                triangles[bottomIndex] = handleIndex;
-                triangles[bottomIndex + 1] = handleIndex + 1;
-                triangles[bottomIndex + 2] = handleIndex + 2;
-
-                int topIndex = tipIndex * 3;
-                triangles[topIndex] = tipIndex;
-                triangles[topIndex + 1] = tipIndex + 1;
-                triangles[topIndex + 2] = tipIndex + 2;
-            }
         }
 
         mesh.SetVertices(vertices);
-        mesh.uv = uvs;
-        mesh.triangles = triangles;
 
-        meshFilter.mesh = mesh;
+        if(meshStructureChanged)
+        {
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(triangles, 0);
+        }
     }
 
 
