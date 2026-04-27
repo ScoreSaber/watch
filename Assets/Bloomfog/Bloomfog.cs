@@ -8,6 +8,12 @@ public class Bloomfog : ScriptableRendererFeature
     public static bool Enabled = true;
     public static int Quality = 2;
 
+    private static readonly int fogTextureToScreenRatioID = Shader.PropertyToID("_FogTextureToScreenRatio");
+    private static readonly int thresholdID = Shader.PropertyToID("_Threshold");
+    private static readonly int brightnessMultID = Shader.PropertyToID("_BrightnessMult");
+    private static readonly int offsetID = Shader.PropertyToID("_Offset");
+    private static readonly int blurAlphaID = Shader.PropertyToID("_BlurAlpha");
+
     [System.Serializable]
     public class BloomfogSettings
     {
@@ -30,8 +36,24 @@ public class Bloomfog : ScriptableRendererFeature
         [System.NonSerialized] public int textureWidth;
         [System.NonSerialized] public int textureHeight;
         [System.NonSerialized] public int actualDownsamplePasses;
+        [System.NonSerialized] private string cachedOutputTextureName;
+        [System.NonSerialized] private int outputTextureID;
 
         public BloomfogQualityPreset currentQualityPreset => qualityPresets[Mathf.Clamp(Quality, 0, qualityPresets.Length - 1)];
+        public bool hasOutputTexture => !string.IsNullOrEmpty(outputTextureName);
+        public int outputTexturePropertyID
+        {
+            get
+            {
+                if(cachedOutputTextureName != outputTextureName)
+                {
+                    cachedOutputTextureName = outputTextureName;
+                    outputTextureID = hasOutputTexture ? Shader.PropertyToID(outputTextureName) : 0;
+                }
+
+                return outputTextureID;
+            }
+        }
     }
 
     [System.Serializable]
@@ -46,6 +68,7 @@ public class Bloomfog : ScriptableRendererFeature
     [SerializeField] private BloomfogSettings settings = new BloomfogSettings();
 
     private BloomFogPass bloomFogPass;
+    private Camera mainCamera;
 
 
     public override void Create()
@@ -57,7 +80,7 @@ public class Bloomfog : ScriptableRendererFeature
 
     public override void OnCameraPreCull(ScriptableRenderer renderer, in CameraData cameraData)
     {
-        Camera mainCamera = Camera.main;
+        Camera mainCamera = GetMainCamera();
         Camera renderCamera = cameraData.camera;
 
         BloomfogQualityPreset qualitySettings = settings.currentQualityPreset;
@@ -86,7 +109,7 @@ public class Bloomfog : ScriptableRendererFeature
         settings.textureHeight = qualitySettings.referenceScreenHeight;
         settings.textureWidth = (int)referenceWidth;
 
-        Shader.SetGlobalVector("_FogTextureToScreenRatio", new Vector2(widthRatio, heightRatio));
+        Shader.SetGlobalVector(fogTextureToScreenRatioID, new Vector2(widthRatio, heightRatio));
     }
 
 
@@ -96,6 +119,17 @@ public class Bloomfog : ScriptableRendererFeature
         {
             renderer.EnqueuePass(bloomFogPass);
         }
+    }
+
+
+    private Camera GetMainCamera()
+    {
+        if(!mainCamera || !mainCamera.isActiveAndEnabled || !mainCamera.CompareTag("MainCamera"))
+        {
+            mainCamera = Camera.main;
+        }
+
+        return mainCamera;
     }
 
 
@@ -124,6 +158,26 @@ public class Bloomfog : ScriptableRendererFeature
             int minDimension = Mathf.Min(width, height);
             int maxDownsample = Mathf.FloorToInt(Mathf.Log(minDimension, 2));
             settings.actualDownsamplePasses = Mathf.Clamp(qualitySettings.downsamplePasses, 2, maxDownsample);
+
+            EnsureTempTargets(settings.actualDownsamplePasses);
+        }
+
+
+        private void EnsureTempTargets(int count)
+        {
+            if(tempIDs != null && tempIDs.Length >= count)
+            {
+                return;
+            }
+
+            tempIDs = new int[count];
+            tempRTs = new RenderTargetIdentifier[count];
+
+            for(int i = 0; i < count; i++)
+            {
+                tempIDs[i] = Shader.PropertyToID("tempBlurRT" + i);
+                tempRTs[i] = new RenderTargetIdentifier(tempIDs[i]);
+            }
         }
 
 
@@ -131,10 +185,10 @@ public class Bloomfog : ScriptableRendererFeature
         {
             if(!Enabled)
             {
-                if(!string.IsNullOrEmpty(settings.outputTextureName))
+                if(settings.hasOutputTexture)
                 {
                     //Bloomfog shouldn't be used, just output a black texture
-                    Shader.SetGlobalTexture(settings.outputTextureName, Texture2D.blackTexture);
+                    Shader.SetGlobalTexture(settings.outputTexturePropertyID, Texture2D.blackTexture);
                 }
                 return;
             }
@@ -143,50 +197,47 @@ public class Bloomfog : ScriptableRendererFeature
             CommandBuffer cmd = CommandBufferPool.Get("BloomfogBlur");
 
             //Create our temporary render textures for blurring
-            tempIDs = new int[settings.actualDownsamplePasses];
-            tempRTs = new RenderTargetIdentifier[settings.actualDownsamplePasses];
+            int downsample = 2;
             for(int i = 0; i < settings.actualDownsamplePasses; i++)
             {
-                int downsample = (int)Mathf.Pow(2, i + 1);
-
-                tempIDs[i] = Shader.PropertyToID("tempBlurRT" + i);
                 cmd.GetTemporaryRT(tempIDs[i], settings.textureWidth / downsample, settings.textureHeight / downsample, 0, FilterMode.Bilinear, RenderTextureFormat.DefaultHDR);
-                tempRTs[i] = new RenderTargetIdentifier(tempIDs[i]);
 
                 //Clear the texture content in case it's been carried over from the last frame
                 cmd.SetRenderTarget(tempRTs[i]);
                 cmd.ClearRenderTarget(true, true, Color.black);
+
+                downsample *= 2;
             }
 
             //Copy the source into the first temp texture, applying brightness threshold
-            cmd.SetGlobalFloat("_Threshold", settings.threshold);
-            cmd.SetGlobalFloat("_BrightnessMult", settings.brightnessMult);
+            cmd.SetGlobalFloat(thresholdID, settings.threshold);
+            cmd.SetGlobalFloat(brightnessMultID, settings.brightnessMult);
 
             cmd.Blit(renderingData.cameraData.targetTexture, tempRTs[0], settings.prepassMaterial);
 
             //Blit the source image into smaller and smaller textures, applying some blur
-            cmd.SetGlobalFloat("_Offset", 0.5f);
-            cmd.SetGlobalFloat("_BlurAlpha", 1f);
+            cmd.SetGlobalFloat(offsetID, 0.5f);
+            cmd.SetGlobalFloat(blurAlphaID, 1f);
             for(int i = 1; i < settings.actualDownsamplePasses; i++)
             {
                 cmd.Blit(tempRTs[i - 1], tempRTs[i], settings.blurMaterial);
             }
 
             //Blit back up the chain, bringing the blurred image to the half res RT
-            cmd.SetGlobalFloat("_Offset", 1f);
+            cmd.SetGlobalFloat(offsetID, 1f);
             for(int i = settings.actualDownsamplePasses - 1; i > 0; i--)
             {
                 //Blend the low res texture with alpha, to create a custom falloff of brightness
                 //Don't blend high res images to avoid reintroducing unblurred details
                 float alpha = i <= qualitySettings.ignoreUpsampleIndex ? 1f : Mathf.Pow(0.5f, i / qualitySettings.upsampleBlend);
-                cmd.SetGlobalFloat("_BlurAlpha", alpha);
+                cmd.SetGlobalFloat(blurAlphaID, alpha);
 
                 cmd.Blit(tempRTs[i], tempRTs[i - 1], settings.blurMaterial);
             }
 
-            if(!string.IsNullOrEmpty(settings.outputTextureName))
+            if(settings.hasOutputTexture)
             {
-                cmd.SetGlobalTexture(settings.outputTextureName, tempRTs[0]);
+                cmd.SetGlobalTexture(settings.outputTexturePropertyID, tempRTs[0]);
             }
 
             //Release our temporary render textures
