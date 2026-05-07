@@ -110,9 +110,9 @@ public class ReplayManager : MonoBehaviour
             return;
         }
 
-        newReplay.notes.OrderBy(x => x.spawnTime);
-        newReplay.pauses.OrderBy(x => x.time);
-        newReplay.walls.OrderBy(x => x.time);
+        newReplay.notes.Sort((x, y) => x.spawnTime.CompareTo(y.spawnTime));
+        newReplay.pauses.Sort((x, y) => x.time.CompareTo(y.time));
+        newReplay.walls.Sort((x, y) => x.time.CompareTo(y.time));
 
         playerHeightEvents.Clear();
         for(int i = 0; i < newReplay.heights.Count; i++)
