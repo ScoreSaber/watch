@@ -17,6 +17,40 @@ public static class FileUtil
     }
 
 
+    public static byte[] StreamToBytes(Stream sourceStream, long length)
+    {
+        if(sourceStream == null)
+        {
+            return null;
+        }
+
+        if(length < 0 || length > int.MaxValue)
+        {
+            return StreamToBytes(sourceStream);
+        }
+
+        byte[] data = new byte[(int)length];
+        int offset = 0;
+        while(offset < data.Length)
+        {
+            int bytesRead = sourceStream.Read(data, offset, data.Length - offset);
+            if(bytesRead == 0)
+            {
+                break;
+            }
+
+            offset += bytesRead;
+        }
+
+        if(offset < data.Length)
+        {
+            Array.Resize(ref data, offset);
+        }
+
+        return data;
+    }
+
+
     public static Stream ReadFileData(string path)
     {
         if(!File.Exists(path))
