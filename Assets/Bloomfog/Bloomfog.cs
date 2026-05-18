@@ -11,7 +11,6 @@ public class Bloomfog : ScriptableRendererFeature
     private static readonly int fogTextureToScreenRatioID = Shader.PropertyToID("_FogTextureToScreenRatio");
     private static readonly int thresholdID = Shader.PropertyToID("_Threshold");
     private static readonly int brightnessMultID = Shader.PropertyToID("_BrightnessMult");
-    private static readonly int offsetID = Shader.PropertyToID("_Offset");
     private static readonly int blurAlphaID = Shader.PropertyToID("_BlurAlpha");
 
     [System.Serializable]
@@ -202,10 +201,6 @@ public class Bloomfog : ScriptableRendererFeature
             {
                 cmd.GetTemporaryRT(tempIDs[i], settings.textureWidth / downsample, settings.textureHeight / downsample, 0, FilterMode.Bilinear, RenderTextureFormat.DefaultHDR);
 
-                //Clear the texture content in case it's been carried over from the last frame
-                cmd.SetRenderTarget(tempRTs[i]);
-                cmd.ClearRenderTarget(true, true, Color.black);
-
                 downsample *= 2;
             }
 
@@ -216,7 +211,6 @@ public class Bloomfog : ScriptableRendererFeature
             cmd.Blit(renderingData.cameraData.targetTexture, tempRTs[0], settings.prepassMaterial);
 
             //Blit the source image into smaller and smaller textures, applying some blur
-            cmd.SetGlobalFloat(offsetID, 0.5f);
             cmd.SetGlobalFloat(blurAlphaID, 1f);
             for(int i = 1; i < settings.actualDownsamplePasses; i++)
             {
@@ -224,7 +218,6 @@ public class Bloomfog : ScriptableRendererFeature
             }
 
             //Blit back up the chain, bringing the blurred image to the half res RT
-            cmd.SetGlobalFloat(offsetID, 1f);
             for(int i = settings.actualDownsamplePasses - 1; i > 0; i--)
             {
                 //Blend the low res texture with alpha, to create a custom falloff of brightness
