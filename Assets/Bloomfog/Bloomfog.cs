@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -5,8 +6,28 @@ using UnityEngine.Rendering.Universal;
 public class Bloomfog : ScriptableRendererFeature
 {
     //These are static fields for graphics settings to access
-    public static bool Enabled = true;
     public static int Quality = 2;
+
+    private static readonly List<BloomfogSettings> activeSettings = new List<BloomfogSettings>();
+    private static bool enabled = true;
+
+    public static bool Enabled
+    {
+        get => enabled;
+        set
+        {
+            if(enabled == value)
+            {
+                return;
+            }
+
+            enabled = value;
+            if(!enabled)
+            {
+                SetGlobalBlackTextures();
+            }
+        }
+    }
 
     private static readonly int fogTextureToScreenRatioID = Shader.PropertyToID("_FogTextureToScreenRatio");
     private static readonly int thresholdID = Shader.PropertyToID("_Threshold");
@@ -72,6 +93,8 @@ public class Bloomfog : ScriptableRendererFeature
 
     public override void Create()
     {
+        RegisterSettings(settings);
+
         bloomFogPass = new BloomFogPass(settings);
         bloomFogPass.renderPassEvent = RenderPassEvent.AfterRenderingPostProcessing;
     }
@@ -114,9 +137,43 @@ public class Bloomfog : ScriptableRendererFeature
 
     public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
     {
-        if(settings.blurMaterial && settings.prepassMaterial)
+        if(Enabled && settings.blurMaterial && settings.prepassMaterial)
         {
             renderer.EnqueuePass(bloomFogPass);
+        }
+    }
+
+
+    protected override void Dispose(bool disposing)
+    {
+        activeSettings.Remove(settings);
+        base.Dispose(disposing);
+    }
+
+
+    private static void RegisterSettings(BloomfogSettings fogSettings)
+    {
+        if(!activeSettings.Contains(fogSettings))
+        {
+            activeSettings.Add(fogSettings);
+        }
+    }
+
+
+    private static void SetGlobalBlackTextures()
+    {
+        for(int i = 0; i < activeSettings.Count; i++)
+        {
+            SetGlobalBlackTexture(activeSettings[i]);
+        }
+    }
+
+
+    private static void SetGlobalBlackTexture(BloomfogSettings fogSettings)
+    {
+        if(fogSettings.hasOutputTexture)
+        {
+            Shader.SetGlobalTexture(fogSettings.outputTexturePropertyID, Texture2D.blackTexture);
         }
     }
 
@@ -182,13 +239,8 @@ public class Bloomfog : ScriptableRendererFeature
 
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
-            if(!Enabled)
+            if(!Bloomfog.Enabled)
             {
-                if(settings.hasOutputTexture)
-                {
-                    //Bloomfog shouldn't be used, just output a black texture
-                    Shader.SetGlobalTexture(settings.outputTexturePropertyID, Texture2D.blackTexture);
-                }
                 return;
             }
 
@@ -199,7 +251,7 @@ public class Bloomfog : ScriptableRendererFeature
             int downsample = 2;
             for(int i = 0; i < settings.actualDownsamplePasses; i++)
             {
-                cmd.GetTemporaryRT(tempIDs[i], settings.textureWidth / downsample, settings.textureHeight / downsample, 0, FilterMode.Bilinear, RenderTextureFormat.DefaultHDR);
+                cmd.GetTemporaryRT(tempIDs[i], settings.textureWidth / downsample, settings.textureHeight / downsample, 0, FilterMode.Bilinear, RenderTextureFormat.RGB111110Float);
 
                 downsample *= 2;
             }
