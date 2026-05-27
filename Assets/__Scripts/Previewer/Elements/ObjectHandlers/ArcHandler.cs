@@ -9,8 +9,23 @@ public class ArcHandler : MonoBehaviour
 
     public void SetArcPoints(Vector3[] newPoints)
     {
-        lineRenderer.positionCount = newPoints.Length;
-        lineRenderer.SetPositions(newPoints);
+        SetArcPoints(newPoints, newPoints.Length);
+    }
+
+
+    public void SetArcPoints(Vector3[] newPoints, int pointCount)
+    {
+        lineRenderer.positionCount = pointCount;
+        if(pointCount == newPoints.Length)
+        {
+            lineRenderer.SetPositions(newPoints);
+            return;
+        }
+
+        for(int i = 0; i < pointCount; i++)
+        {
+            lineRenderer.SetPosition(i, newPoints[i]);
+        }
     }
 
 
