@@ -3,6 +3,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using System;
 
 public class PlayerInfoPanel : MonoBehaviour
 {
@@ -71,7 +72,12 @@ public class PlayerInfoPanel : MonoBehaviour
 
     private void UpdateModifiers()
     {
-        string[] modifiers = ReplayManager.Modifiers;
+        bool replayFailed = (ReplayManager.CurrentReplay?.info.failTime ?? 0f) > 0f;
+        string[] modifiers = ReplayManager.Modifiers
+            .Where(m => !string.IsNullOrEmpty(m))
+            .Where(m => !m.Equals("NF", StringComparison.InvariantCultureIgnoreCase) || replayFailed)
+            .ToArray();
+
         if(modifiers.Length == 0)
         {
             modifierText.gameObject.SetActive(false);
