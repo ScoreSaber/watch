@@ -4,7 +4,7 @@
 
 ### Unity
 
-Use Unity `6000.0.62f1`
+Use Unity `6000.0.67f1`
 
 Install WebGL Build Support if you're working on the hosted watch app
 

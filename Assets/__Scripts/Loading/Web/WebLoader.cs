@@ -58,6 +58,7 @@ public static class ApiConfig
 public class WebLoader
 {
     public const string CorsProxy = "https://cors.bsmg.dev/";
+    private const string ScoreSaberAvatarCdnPrefix = "https://cdn.scoresaber.com/avatars/";
 
     //Domains listed in this array will bypass the CORS proxy
     //Map sources that include CORS headers should be added here for faster downloads
@@ -82,6 +83,11 @@ public class WebLoader
 
     public static string GetCorsURL(string url)
     {
+        if(url.StartsWith(ScoreSaberAvatarCdnPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return url;
+        }
+
         if(WhitelistURLs.Any(x => url.StartsWith(x, StringComparison.OrdinalIgnoreCase)))
         {
             return url;
