@@ -586,7 +586,7 @@ public class ObjectManager : MonoBehaviour
                     if(matchingEvent == null)
                     {
                         //Unable to match the note with its "correct" ID, try brute forcing all scoring types
-                        matchingEvent = ScoringEvent.BruteForceMatchNote(scoringEventsOnBeat, ref newNote.ScoringType, noteID, hasTail, hasHead, newNote.IsChainHead);
+                        matchingEvent = ScoringEvent.MatchNote(scoringEventsOnBeat, newNote.ScoringType, noteID);
                     }
 
                     if(matchingEvent == null || matchingEvent.noteEventType == NoteEventType.miss)
