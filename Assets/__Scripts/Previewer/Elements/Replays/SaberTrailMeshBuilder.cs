@@ -86,6 +86,7 @@ public class SaberTrailMeshBuilder : MonoBehaviour
 
         EnsureMeshAssigned();
         bool meshStructureChanged = EnsureBuffers(segmentCount);
+        Matrix4x4 worldToLocal = transform.worldToLocalMatrix;
 
         int frameIndex = startIndex;
         for(int i = 0; i < segmentCount; i++)
@@ -123,9 +124,9 @@ public class SaberTrailMeshBuilder : MonoBehaviour
             Quaternion saberRotation = Quaternion.Lerp(currentRotation, nextRotation, t);
 
             saberPosition.z -= ObjectManager.PlayerCutPlaneDistance;
-            saberPosition = transform.InverseTransformPoint(saberPosition);
+            saberPosition = worldToLocal.MultiplyPoint3x4(saberPosition);
 
-            Vector3 tipPoint = transform.InverseTransformDirection(saberRotation * tipOffset);
+            Vector3 tipPoint = worldToLocal.MultiplyVector(saberRotation * tipOffset);
 
             Vector3 tipDirection = tipPoint.normalized;
             Vector3 handlePoint = tipPoint - (tipDirection * trailWidth);

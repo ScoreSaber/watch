@@ -52,13 +52,15 @@ public class BombManager : MapElementManager<Bomb>
             worldPos.y = jumpManager.GetObjectY(b.StartY, worldPos.y, worldDist, halfJumpDistance, b.Time, reactionTime);
         }
 
+        Transform visualTransform;
         if(b.Visual == null)
         {
             b.BombHandler = bombPool.GetObject();
             b.Visual = b.BombHandler.gameObject;
             b.source = b.BombHandler.audioSource;
 
-            b.Visual.transform.SetParent(transform);
+            visualTransform = b.Visual.transform;
+            visualTransform.SetParent(transform);
             b.BombHandler.EnableVisual();
 
             b.BombHandler.SetMaterial(objectManager.useSimpleBombMaterial ? simpleMaterial : complexMaterial);
@@ -89,7 +91,11 @@ public class BombManager : MapElementManager<Bomb>
             b.Visual.SetActive(true);
             RenderedObjects.Add(b);
         }
-        b.Visual.transform.localPosition = worldPos;
+        else
+        {
+            visualTransform = b.Visual.transform;
+        }
+        visualTransform.localPosition = worldPos;
     }
 
 
@@ -131,7 +137,7 @@ public class BombManager : MapElementManager<Bomb>
                 else
                 {
                     ReleaseVisual(b);
-                    RenderedObjects.Remove(b);
+                    RenderedObjects.RemoveAt(i);
                 }
             }
             else if(b.ShouldShowVisual) b.BombHandler.EnableVisual();

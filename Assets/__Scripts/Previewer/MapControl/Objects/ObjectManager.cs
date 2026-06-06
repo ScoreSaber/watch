@@ -844,7 +844,7 @@ public abstract class MapElementManager<T> : MonoBehaviour where T : MapElement
             if(!VisualInSpawnRange(visual))
             {
                 ReleaseVisual(visual);
-                RenderedObjects.Remove(visual);
+                RenderedObjects.RemoveAt(i);
             }
         }
     }

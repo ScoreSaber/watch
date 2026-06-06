@@ -202,13 +202,15 @@ public class ChainManager : MapElementManager<ChainLink>
             }
         }
 
+        Transform visualTransform;
         if(cl.Visual == null)
         {
             cl.ChainLinkHandler = chainLinkPool.GetObject();
             cl.Visual = cl.ChainLinkHandler.gameObject;
             cl.source = cl.ChainLinkHandler.audioSource;
 
-            cl.Visual.transform.SetParent(transform);
+            visualTransform = cl.Visual.transform;
+            visualTransform.SetParent(transform);
             cl.ChainLinkHandler.EnableVisual();
 
             cl.ChainLinkHandler.SetMaterial(objectManager.useSimpleNoteMaterial ? noteManager.simpleMaterial : noteManager.complexMaterial);
@@ -226,7 +228,7 @@ public class ChainManager : MapElementManager<ChainLink>
             }
 
             float noteSize = Mathf.Clamp(SettingsManager.GetFloat("notesize"), 0.5f, 1f);
-            cl.Visual.transform.localScale = Vector3.one * noteSize;
+            visualTransform.localScale = Vector3.one * noteSize;
 
             cl.Visual.SetActive(true);
             cl.ChainLinkHandler.EnableVisual();
@@ -252,9 +254,13 @@ public class ChainManager : MapElementManager<ChainLink>
 
             RenderedObjects.Add(cl);
         }
+        else
+        {
+            visualTransform = cl.Visual.transform;
+        }
 
-        cl.Visual.transform.localPosition = worldPos;
-        cl.Visual.transform.localRotation = Quaternion.AngleAxis(angle, Vector3.forward);
+        visualTransform.localPosition = worldPos;
+        visualTransform.localRotation = Quaternion.AngleAxis(angle, Vector3.forward);
     }
 
 
@@ -296,7 +302,7 @@ public class ChainManager : MapElementManager<ChainLink>
                 else
                 {
                     ReleaseVisual(cl);
-                    RenderedObjects.Remove(cl);
+                    RenderedObjects.RemoveAt(i);
                 }
             }
             else if(cl.ShouldShowVisual) cl.ChainLinkHandler.EnableVisual();

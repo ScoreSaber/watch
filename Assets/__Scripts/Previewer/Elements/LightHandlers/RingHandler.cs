@@ -12,6 +12,9 @@ public class RingHandler : MonoBehaviour
     [SerializeField] private bool bigRing;
     [SerializeField] private int id;
 
+    private Vector3 defaultEulerAngles;
+    private float lastAngle = float.NaN;
+
 #if UNITY_EDITOR
     [SerializeField] private int lightIdOffset;
     [SerializeField] private List<LightHandler> lightHandlers;
@@ -56,14 +59,24 @@ public class RingHandler : MonoBehaviour
 
     private void SetRotation(float angle)
     {
-        Vector3 eulerAngles = transform.localEulerAngles;
-        eulerAngles.z = angle % 360;
+        angle %= 360;
+        if(lastAngle == angle)
+        {
+            return;
+        }
+
+        lastAngle = angle;
+
+        Vector3 eulerAngles = defaultEulerAngles;
+        eulerAngles.z = angle;
         transform.localEulerAngles = eulerAngles;
     }
 
 
     private void OnEnable()
     {
+        defaultEulerAngles = transform.localEulerAngles;
+        lastAngle = float.NaN;
         RingManager.OnRingRotationsChanged += UpdateRingRotations;
     }
 

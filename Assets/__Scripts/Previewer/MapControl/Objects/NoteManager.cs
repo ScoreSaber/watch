@@ -141,13 +141,15 @@ public class NoteManager : MapElementManager<Note>
         }
         Quaternion worldRotation = Quaternion.AngleAxis(angle, Vector3.forward);
 
+        Transform visualTransform;
         if(n.Visual == null)
         {
             n.NoteHandler = notePool.GetObject();
             n.Visual = n.NoteHandler.gameObject;
             n.source = n.NoteHandler.audioSource;
 
-            n.Visual.transform.SetParent(transform);
+            visualTransform = n.Visual.transform;
+            visualTransform.SetParent(transform);
             n.NoteHandler.EnableVisual();
 
             n.NoteHandler.SetMesh(n.IsChainHead ? chainHeadMesh : noteMesh);
@@ -168,7 +170,7 @@ public class NoteManager : MapElementManager<Note>
             }
 
             float noteSize = Mathf.Clamp(SettingsManager.GetFloat("notesize"), 0.5f, 1f);
-            n.Visual.transform.localScale = Vector3.one * noteSize;
+            visualTransform.localScale = Vector3.one * noteSize;
 
             n.Visual.SetActive(true);
             n.NoteHandler.EnableVisual();
@@ -194,15 +196,19 @@ public class NoteManager : MapElementManager<Note>
 
             RenderedObjects.Add(n);
         }
+        else
+        {
+            visualTransform = n.Visual.transform;
+        }
 
-        n.Visual.transform.localPosition = worldPos;
+        visualTransform.localPosition = worldPos;
 
         if(objectManager.doLookAnimation && !n.IsChainHead)
         {
             //Notes look towards the player's head in replays
             if(jumpProgress < 1f)
             {
-                n.Visual.transform.localRotation = objectManager.LookAtPlayer(n.Visual.transform.position, PlayerPositionManager.HeadPosition, worldRotation, jumpProgress);
+                visualTransform.localRotation = objectManager.LookAtPlayer(visualTransform.position, PlayerPositionManager.HeadPosition, worldRotation, jumpProgress);
             }
             else
             {
@@ -211,12 +217,12 @@ public class NoteManager : MapElementManager<Note>
                 Vector3 endRotationPosition = objectManager.ObjectSpaceToWorldSpace(n.Position);
                 endRotationPosition.z = n.EndHeadPosition.z + ObjectManager.PlayerCutPlaneDistance;
 
-                n.Visual.transform.localRotation = objectManager.LookAtPlayer(endRotationPosition, n.EndHeadPosition, worldRotation, jumpProgress);
+                visualTransform.localRotation = objectManager.LookAtPlayer(endRotationPosition, n.EndHeadPosition, worldRotation, jumpProgress);
             }
         }
         else
         {
-            n.Visual.transform.localRotation = worldRotation;
+            visualTransform.localRotation = worldRotation;
         }
     }
 
@@ -259,7 +265,7 @@ public class NoteManager : MapElementManager<Note>
                 else
                 {
                     ReleaseVisual(n);
-                    RenderedObjects.Remove(n);
+                    RenderedObjects.RemoveAt(i);
                 }
             }
             else if(n.ShouldShowVisual) n.NoteHandler.EnableVisual();
