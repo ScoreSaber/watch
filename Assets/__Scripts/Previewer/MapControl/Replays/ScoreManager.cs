@@ -80,6 +80,17 @@ public class ScoreManager : MonoBehaviour
     [SerializeField] private ScoreColorSettings[] colorSettings;
 
     private ScoreColorSettings currentColorSettings = new ScoreColorSettings();
+    private int cachedScoreTextScore = int.MinValue;
+    private int cachedComboTextCombo = int.MinValue;
+    private int cachedMissTextMisses = int.MinValue;
+    private int cachedMultiplierTextComboMult = int.MinValue;
+    private int cachedComboProgressMult = int.MinValue;
+    private int cachedComboProgress = int.MinValue;
+    private float cachedScorePercentage = float.NaN;
+    private float cachedFCPercentage = float.NaN;
+    private float cachedGradePercentage = float.NaN;
+    private bool cachedFullCombo;
+    private bool hasCachedFullCombo;
 
 
     public static void InitializeMapScore()
@@ -295,6 +306,113 @@ public class ScoreManager : MonoBehaviour
     }
 
 
+    private void ResetHudTextCache()
+    {
+        cachedScoreTextScore = int.MinValue;
+        cachedComboTextCombo = int.MinValue;
+        cachedMissTextMisses = int.MinValue;
+        cachedMultiplierTextComboMult = int.MinValue;
+        cachedComboProgressMult = int.MinValue;
+        cachedComboProgress = int.MinValue;
+        cachedScorePercentage = float.NaN;
+        cachedFCPercentage = float.NaN;
+        cachedGradePercentage = float.NaN;
+        hasCachedFullCombo = false;
+    }
+
+
+    private static string FormatScore(int score)
+    {
+        string baseScoreString = score.ToString();
+        string scoreString = "";
+        int maxIndex = baseScoreString.Length;
+        for(int i = maxIndex - 1; i >= 0; i -= 3)
+        {
+            int startIndex = Mathf.Max(i - 2, 0);
+            int length = Mathf.Min(3, maxIndex - startIndex);
+            string substring = baseScoreString.Substring(startIndex, length);
+            if(scoreString == "")
+            {
+                scoreString = substring;
+            }
+            else scoreString = substring + ' ' + scoreString;
+
+            maxIndex = startIndex;
+        }
+
+        return scoreString;
+    }
+
+
+    private void UpdateHudDisplay(
+        int currentScore,
+        float currentPercentage,
+        float currentFCPercentage,
+        int currentCombo,
+        int currentComboMult,
+        int currentComboProgress,
+        int currentMisses,
+        bool currentFullCombo,
+        float gradePercentage)
+    {
+        if(cachedComboTextCombo != currentCombo)
+        {
+            cachedComboTextCombo = currentCombo;
+            comboText.text = currentCombo.ToString();
+        }
+
+        if(cachedMissTextMisses != currentMisses)
+        {
+            cachedMissTextMisses = currentMisses;
+            missText.text = currentMisses.ToString();
+        }
+
+        if(cachedGradePercentage != gradePercentage)
+        {
+            cachedGradePercentage = gradePercentage;
+            gradeText.text = GradeFromPercentage(gradePercentage);
+        }
+
+        if(cachedScoreTextScore != currentScore)
+        {
+            cachedScoreTextScore = currentScore;
+            scoreText.text = FormatScore(currentScore);
+        }
+
+        if(cachedScorePercentage != currentPercentage)
+        {
+            cachedScorePercentage = currentPercentage;
+            scorePercentageText.text = GetPercentageString(currentPercentage);
+        }
+
+        if(cachedFCPercentage != currentFCPercentage)
+        {
+            cachedFCPercentage = currentFCPercentage;
+            fcPercentageText.text = $"FC : {GetPercentageString(currentFCPercentage)}";
+        }
+
+        if(cachedMultiplierTextComboMult != currentComboMult)
+        {
+            cachedMultiplierTextComboMult = currentComboMult;
+            multiplierText.text = multiplierPrefix + ComboMultipliers[currentComboMult].ToString();
+        }
+
+        if(cachedComboProgressMult != currentComboMult || cachedComboProgress != currentComboProgress)
+        {
+            cachedComboProgressMult = currentComboMult;
+            cachedComboProgress = currentComboProgress;
+            comboProgressFill.fillAmount = (float)currentComboProgress / HitsNeededForComboIncrease[currentComboMult];
+        }
+
+        if(!hasCachedFullCombo || cachedFullCombo != currentFullCombo)
+        {
+            hasCachedFullCombo = true;
+            cachedFullCombo = currentFullCombo;
+            FCBars.gameObject.SetActive(currentFullCombo);
+        }
+    }
+
+
     private ScoreTextInfo GetIndicatorInfo(ScoringEvent scoringEvent)
     {
         if(scoringEvent.IsBadHit)
@@ -462,46 +580,21 @@ public class ScoreManager : MonoBehaviour
             currentMisses = 0;
         }
 
-        comboText.text = currentCombo.ToString();
-        missText.text = currentMisses.ToString();
-
         float effectivePercentage = currentPercentage * ReplayManager.ModifierMult;
         if(ReplayManager.HasFailed)
         {
             effectivePercentage *= 0.5f;
         }
-        gradeText.text = GradeFromPercentage(effectivePercentage);
-
-        //The score gets a space inserted between every 3 decimals
-        string baseScoreString = currentScore.ToString();
-        string scoreString = "";
-        int maxIndex = baseScoreString.Length;
-        for(int i = maxIndex - 1; i >= 0; i -= 3)
-        {
-            //Gather the next digits, up to 3 if they're available
-            //(logic is funky cause this needs to be done backwards)
-            int startIndex = Mathf.Max(i - 2, 0);
-            int length = Mathf.Min(3, maxIndex - startIndex);
-            string substring = baseScoreString.Substring(startIndex, length);
-            if(scoreString == "")
-            {
-                //No space if the string is empty
-                scoreString = substring;
-            }
-            else scoreString = substring + ' ' + scoreString;
-
-            //Make sure none of these digits are used by the next round
-            maxIndex = startIndex;
-        }
-
-        scoreText.text = scoreString;
-
-        scorePercentageText.text = GetPercentageString(currentPercentage);
-        fcPercentageText.text = $"FC : {GetPercentageString(currentFCPercentage)}";
-
-        multiplierText.text = multiplierPrefix + ComboMultipliers[currentComboMult].ToString();
-        comboProgressFill.fillAmount = (float)currentComboProgress / HitsNeededForComboIncrease[currentComboMult];
-        FCBars.gameObject.SetActive(currentMisses <= 0);
+        UpdateHudDisplay(
+            currentScore,
+            currentPercentage,
+            currentFCPercentage,
+            currentCombo,
+            currentComboMult,
+            currentComboProgress,
+            currentMisses,
+            currentMisses <= 0,
+            effectivePercentage);
 
         float healthBarWidth = energyBar.sizeDelta.x;
         energyBarFill.sizeDelta = new Vector2(healthBarWidth * PlayerPositionManager.Energy, energyBarFill.sizeDelta.y);
@@ -512,6 +605,7 @@ public class ScoreManager : MonoBehaviour
     {
         ClearIndicators();
         ScoringEvents.Clear();
+        ResetHudTextCache();
         hudObject.SetActive(false);
 
         TimeManager.OnBeatChanged -= UpdateBeat;
@@ -525,6 +619,7 @@ public class ScoreManager : MonoBehaviour
         {
             bool showHud = SettingsManager.GetBool("showhud");
             ScoringEvents.Clear();
+            ResetHudTextCache();
             hudObject.SetActive(showHud);
 
             foreach(NoteEvent noteEvent in ReplayManager.CurrentReplay.notes)
