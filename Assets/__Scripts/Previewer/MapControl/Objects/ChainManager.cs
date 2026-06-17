@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -17,9 +18,14 @@ public class ChainManager : MapElementManager<ChainLink>
         Objects.Clear();
         CustomRTObjects.Clear();
         CustomRTObjects.GetTime = GetSpawnTime;
+
+        ScoringEventObjectTimeLookup scoringEventLookup = ReplayManager.IsReplayMode
+            ? new ScoringEventObjectTimeLookup(ScoreManager.ScoringEvents)
+            : null;
+
         foreach(Chain c in Chains)
         {
-            CreateChainLinks(c);
+            CreateChainLinks(c, scoringEventLookup);
         }
         Objects.SortElementsByBeat();
         CustomRTObjects.SortElementsByBeat();
@@ -31,7 +37,7 @@ public class ChainManager : MapElementManager<ChainLink>
     }
 
 
-    private void CreateChainLinks(Chain c)
+    private void CreateChainLinks(Chain c, ScoringEventObjectTimeLookup scoringEventLookup)
     {
         //These are the start and end points of the bezier curve
         Vector2 startPos = c.Position;
@@ -56,7 +62,8 @@ public class ChainManager : MapElementManager<ChainLink>
         }
 
         //Keep track of replay events so we don't reuse them
-        List<ScoringEvent> usedScoringEvents = new List<ScoringEvent>();
+        HashSet<ScoringEvent> usedScoringEvents = ReplayManager.IsReplayMode ? new HashSet<ScoringEvent>() : null;
+        List<ScoringEvent> scoringEventsOnBeat = ReplayManager.IsReplayMode ? new List<ScoringEvent>() : null;
 
         //Start at 1 because head note counts as a "segment"
         for(int i = 1; i < c.SegmentCount; i++)
@@ -88,7 +95,7 @@ public class ChainManager : MapElementManager<ChainLink>
             if(ReplayManager.IsReplayMode)
             {
                 //Links need to be matched up with their corresponding NoteEvents
-                List<ScoringEvent> scoringEventsOnBeat = ScoreManager.ScoringEvents.FindAll(x => ObjectManager.CheckSameTime(x.ObjectTime, newLink.Time));
+                scoringEventLookup.GetEventsAtObjectTime(newLink.Time, scoringEventsOnBeat);
 
                 BeatmapBurstSlider originalSlider = c.burstSlider;
 
@@ -99,13 +106,13 @@ public class ChainManager : MapElementManager<ChainLink>
 
                 int linkID = ((int)ScoringType.ChainLink * 10000) + (linkX * 1000) + (linkY * 100) + (c.Color * 10) + 8;
 
-                ScoringEvent matchingEvent = scoringEventsOnBeat.Find(x => x.ID == linkID && !usedScoringEvents.Contains(x));
+                ScoringEvent matchingEvent = FindUnusedScoringEvent(scoringEventsOnBeat, linkID, usedScoringEvents);
                 if(matchingEvent == null && isLastElement)
                 {
                     //See if this link counts as an arc head
                     linkID -= (int)ScoringType.ChainLink * 10000;
                     linkID += (int)ScoringType.ChainLinkArcHead * 10000;
-                    matchingEvent = scoringEventsOnBeat.Find(x => x.ID == linkID && !usedScoringEvents.Contains(x));
+                    matchingEvent = FindUnusedScoringEvent(scoringEventsOnBeat, linkID, usedScoringEvents);
 
                     if(matchingEvent == null)
                     {
@@ -113,14 +120,14 @@ public class ChainManager : MapElementManager<ChainLink>
                         linkX = originalSlider.x;
                         linkY = originalSlider.y;
                         linkID = ((int)ScoringType.ChainLink * 10000) + (linkX * 1000) + (linkY * 100) + (c.Color * 10) + 8;
-                        matchingEvent = scoringEventsOnBeat.Find(x => x.ID == linkID && !usedScoringEvents.Contains(x));
+                        matchingEvent = FindUnusedScoringEvent(scoringEventsOnBeat, linkID, usedScoringEvents);
 
                         if(matchingEvent == null)
                         {
                             //Once again see if this counts as an arc head
                             linkID -= (int)ScoringType.ChainLink * 10000;
                             linkID += (int)ScoringType.ChainLinkArcHead * 10000;
-                            matchingEvent = scoringEventsOnBeat.Find(x => x.ID == linkID && !usedScoringEvents.Contains(x));
+                            matchingEvent = FindUnusedScoringEvent(scoringEventsOnBeat, linkID, usedScoringEvents);
                         }
                     }
                 }
@@ -158,6 +165,107 @@ public class ChainManager : MapElementManager<ChainLink>
                 CustomRTObjects.Add(newLink);
             }
             else Objects.Add(newLink);
+        }
+    }
+
+
+    private static ScoringEvent FindUnusedScoringEvent(List<ScoringEvent> scoringEvents, int linkID, HashSet<ScoringEvent> usedScoringEvents)
+    {
+        for(int i = 0; i < scoringEvents.Count; i++)
+        {
+            ScoringEvent scoringEvent = scoringEvents[i];
+            if(scoringEvent.ID == linkID && !usedScoringEvents.Contains(scoringEvent))
+            {
+                return scoringEvent;
+            }
+        }
+
+        return null;
+    }
+
+
+    private struct IndexedScoringEvent
+    {
+        public readonly ScoringEvent ScoringEvent;
+        public readonly int Index;
+
+
+        public IndexedScoringEvent(ScoringEvent scoringEvent, int index)
+        {
+            ScoringEvent = scoringEvent;
+            Index = index;
+        }
+    }
+
+
+    private class ScoringEventObjectTimeLookup
+    {
+        private const float BucketSize = 0.001f;
+
+        private static readonly Comparison<IndexedScoringEvent> CompareByIndex = CompareIndexedScoringEvents;
+
+        private readonly Dictionary<int, List<IndexedScoringEvent>> scoringEventsByBucket = new Dictionary<int, List<IndexedScoringEvent>>();
+        private readonly List<IndexedScoringEvent> indexedMatches = new List<IndexedScoringEvent>();
+
+
+        public ScoringEventObjectTimeLookup(MapElementList<ScoringEvent> scoringEvents)
+        {
+            for(int i = 0; i < scoringEvents.Count; i++)
+            {
+                ScoringEvent scoringEvent = scoringEvents[i];
+                int bucket = BucketForTime(scoringEvent.ObjectTime);
+                if(!scoringEventsByBucket.TryGetValue(bucket, out List<IndexedScoringEvent> bucketEvents))
+                {
+                    bucketEvents = new List<IndexedScoringEvent>();
+                    scoringEventsByBucket[bucket] = bucketEvents;
+                }
+
+                bucketEvents.Add(new IndexedScoringEvent(scoringEvent, i));
+            }
+        }
+
+
+        public void GetEventsAtObjectTime(float objectTime, List<ScoringEvent> matches)
+        {
+            matches.Clear();
+            indexedMatches.Clear();
+
+            int firstBucket = BucketForTime(objectTime - BucketSize);
+            int lastBucket = BucketForTime(objectTime + BucketSize);
+            for(int bucket = firstBucket; bucket <= lastBucket; bucket++)
+            {
+                if(!scoringEventsByBucket.TryGetValue(bucket, out List<IndexedScoringEvent> bucketEvents))
+                {
+                    continue;
+                }
+
+                for(int i = 0; i < bucketEvents.Count; i++)
+                {
+                    IndexedScoringEvent indexedEvent = bucketEvents[i];
+                    if(ObjectManager.CheckSameTime(indexedEvent.ScoringEvent.ObjectTime, objectTime))
+                    {
+                        indexedMatches.Add(indexedEvent);
+                    }
+                }
+            }
+
+            indexedMatches.Sort(CompareByIndex);
+            for(int i = 0; i < indexedMatches.Count; i++)
+            {
+                matches.Add(indexedMatches[i].ScoringEvent);
+            }
+        }
+
+
+        private static int CompareIndexedScoringEvents(IndexedScoringEvent x, IndexedScoringEvent y)
+        {
+            return x.Index.CompareTo(y.Index);
+        }
+
+
+        private static int BucketForTime(float time)
+        {
+            return Mathf.FloorToInt(time / BucketSize);
         }
     }
 

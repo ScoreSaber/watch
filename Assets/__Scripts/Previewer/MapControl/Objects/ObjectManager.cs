@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 public class ObjectManager : MonoBehaviour
 {
+    private const float SameTimeEpsilon = 0.001f;
+
     public static ObjectManager Instance { get; private set; }
 
     [Header("Animation Settings")]
@@ -105,8 +106,7 @@ public class ObjectManager : MonoBehaviour
 
     public static bool CheckSameTime(float time1, float time2)
     {
-        const float epsilon = 0.001f;
-        return Mathf.Abs(time1 - time2) <= epsilon;
+        return Mathf.Abs(time1 - time2) <= SameTimeEpsilon;
     }
 
 
@@ -365,6 +365,130 @@ public class ObjectManager : MonoBehaviour
     }
 
 
+    private class ScoringEventBeatIndex
+    {
+        private readonly List<ScoringEvent>[] scoringEventsByGroup;
+
+
+        public ScoringEventBeatIndex(List<float> groupTimes)
+        {
+            scoringEventsByGroup = new List<ScoringEvent>[groupTimes.Count];
+
+            for(int i = 0; i < ScoreManager.ScoringEvents.Count; i++)
+            {
+                ScoringEvent scoringEvent = ScoreManager.ScoringEvents[i];
+                int firstGroup = FirstGroupAtOrAfter(groupTimes, scoringEvent.ObjectTime - SameTimeEpsilon);
+                if(firstGroup < 0)
+                {
+                    continue;
+                }
+
+                float maxTime = scoringEvent.ObjectTime + SameTimeEpsilon;
+                for(int groupIndex = firstGroup; groupIndex < groupTimes.Count && groupTimes[groupIndex] <= maxTime; groupIndex++)
+                {
+                    if(!CheckSameTime(groupTimes[groupIndex], scoringEvent.ObjectTime))
+                    {
+                        continue;
+                    }
+
+                    if(scoringEventsByGroup[groupIndex] == null)
+                    {
+                        scoringEventsByGroup[groupIndex] = new List<ScoringEvent>();
+                    }
+                    scoringEventsByGroup[groupIndex].Add(scoringEvent);
+                }
+            }
+        }
+
+
+        public List<ScoringEvent> EventsForGroup(int groupIndex)
+        {
+            if(scoringEventsByGroup[groupIndex] == null)
+            {
+                scoringEventsByGroup[groupIndex] = new List<ScoringEvent>();
+            }
+            return scoringEventsByGroup[groupIndex];
+        }
+
+
+        private static int FirstGroupAtOrAfter(List<float> groupTimes, float time)
+        {
+            int min = 0;
+            int max = groupTimes.Count - 1;
+            int result = -1;
+
+            while(min <= max)
+            {
+                int mid = min + ((max - min) / 2);
+                if(groupTimes[mid] >= time)
+                {
+                    result = mid;
+                    max = mid - 1;
+                }
+                else min = mid + 1;
+            }
+
+            return result;
+        }
+    }
+
+
+    private static List<float> GetObjectGroupTimes(List<BeatmapObject> allObjects)
+    {
+        List<float> groupTimes = new List<float>();
+        for(int i = 0; i < allObjects.Count; i++)
+        {
+            float currentTime = TimeManager.TimeFromBeat(allObjects[i].b);
+            groupTimes.Add(currentTime);
+
+            for(int x = i + 1; x < allObjects.Count; x++)
+            {
+                if(CheckSameTime(TimeManager.TimeFromBeat(allObjects[x].b), currentTime))
+                {
+                    i = x;
+                }
+                else break;
+            }
+        }
+
+        return groupTimes;
+    }
+
+
+    private static void AddObjectToBeatLists(
+        BeatmapObject mapObject,
+        List<BeatmapColorNote> notesOnBeat,
+        List<BeatmapBombNote> bombsOnBeat,
+        List<BeatmapBurstSlider> burstSlidersOnBeat,
+        List<BeatmapObstacle> obstaclesOnBeat,
+        List<BeatmapSliderEnd> sliderEndsOnBeat,
+        List<BeatmapObject> notesAndBombs)
+    {
+        if(mapObject is BeatmapColorNote colorNote)
+        {
+            notesOnBeat.Add(colorNote);
+            notesAndBombs.Add(colorNote);
+        }
+        else if(mapObject is BeatmapBombNote bombNote)
+        {
+            bombsOnBeat.Add(bombNote);
+            notesAndBombs.Add(bombNote);
+        }
+        else if(mapObject is BeatmapBurstSlider burstSlider)
+        {
+            burstSlidersOnBeat.Add(burstSlider);
+        }
+        else if(mapObject is BeatmapObstacle obstacle)
+        {
+            obstaclesOnBeat.Add(obstacle);
+        }
+        else if(mapObject is BeatmapSliderEnd sliderEnd)
+        {
+            sliderEndsOnBeat.Add(sliderEnd);
+        }
+    }
+
+
     public static void LoadMapObjects(BeatmapDifficulty beatmapDifficulty, out MapElementList<Note> notes, out MapElementList<Bomb> bombs, out MapElementList<Chain> chains, out MapElementList<Arc> arcs, out MapElementList<Wall> walls)
     {
         // split arcs into heads and tails for easier processing
@@ -434,14 +558,30 @@ public class ObjectManager : MonoBehaviour
         arcs = new MapElementList<Arc>();
         walls = new MapElementList<Wall>();
 
-        List<BeatmapObject> sameBeatObjects = new List<BeatmapObject>();
-        for(int i = 0; i < allObjects.Count; i++)
+        ScoringEventBeatIndex scoringEventIndex = ReplayManager.IsReplayMode
+            ? new ScoringEventBeatIndex(GetObjectGroupTimes(allObjects))
+            : null;
+
+        List<BeatmapColorNote> notesOnBeat = new List<BeatmapColorNote>();
+        List<BeatmapBombNote> bombsOnBeat = new List<BeatmapBombNote>();
+        List<BeatmapBurstSlider> burstSlidersOnBeat = new List<BeatmapBurstSlider>();
+        List<BeatmapObstacle> obstaclesOnBeat = new List<BeatmapObstacle>();
+        List<BeatmapSliderEnd> sliderEndsOnBeat = new List<BeatmapSliderEnd>();
+        List<BeatmapObject> notesAndBombs = new List<BeatmapObject>();
+
+        for(int i = 0, beatGroupIndex = 0; i < allObjects.Count; i++, beatGroupIndex++)
         {
             BeatmapObject current = allObjects[i];
             float currentTime = TimeManager.TimeFromBeat(current.b);
 
-            sameBeatObjects.Clear();
-            sameBeatObjects.Add(current);
+            notesOnBeat.Clear();
+            bombsOnBeat.Clear();
+            burstSlidersOnBeat.Clear();
+            obstaclesOnBeat.Clear();
+            sliderEndsOnBeat.Clear();
+            notesAndBombs.Clear();
+
+            AddObjectToBeatLists(current, notesOnBeat, bombsOnBeat, burstSlidersOnBeat, obstaclesOnBeat, sliderEndsOnBeat, notesAndBombs);
 
             for(int x = i + 1; x < allObjects.Count; x++)
             {
@@ -449,26 +589,18 @@ public class ObjectManager : MonoBehaviour
                 BeatmapObject check = allObjects[x];
                 if(CheckSameTime(TimeManager.TimeFromBeat(check.b), currentTime))
                 {
-                    sameBeatObjects.Add(check);
+                    AddObjectToBeatLists(check, notesOnBeat, bombsOnBeat, burstSlidersOnBeat, obstaclesOnBeat, sliderEndsOnBeat, notesAndBombs);
                     //Skip to the first object that doesn't share this beat next loop
                     i = x;
                 }
                 else break;
             }
 
-            List<BeatmapColorNote> notesOnBeat = sameBeatObjects.OfType<BeatmapColorNote>().ToList();
-            List<BeatmapBombNote> bombsOnBeat = sameBeatObjects.OfType<BeatmapBombNote>().ToList();
-            List<BeatmapBurstSlider> burstSlidersOnBeat = sameBeatObjects.OfType<BeatmapBurstSlider>().ToList();
-            List<BeatmapObstacle> obstaclesOnBeat = sameBeatObjects.OfType<BeatmapObstacle>().ToList();
-            List<BeatmapSliderEnd> sliderEndsOnBeat = sameBeatObjects.OfType<BeatmapSliderEnd>().ToList();
-
-            List<BeatmapObject> notesAndBombs = sameBeatObjects.Where(x => (x is BeatmapColorNote) || (x is BeatmapBombNote)).ToList();
-
             //Need to pair objects to their replay events if we're in a replay
             List<ScoringEvent> scoringEventsOnBeat = null;
             if(ReplayManager.IsReplayMode)
             {
-                scoringEventsOnBeat = ScoreManager.ScoringEvents.FindAll(x => CheckSameTime(x.ObjectTime, currentTime));
+                scoringEventsOnBeat = scoringEventIndex.EventsForGroup(beatGroupIndex);
 
                 if(ReplayManager.NoArrows)
                 {

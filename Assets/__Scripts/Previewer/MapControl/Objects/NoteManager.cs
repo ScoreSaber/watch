@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 public class NoteManager : MapElementManager<Note>
@@ -402,7 +401,12 @@ public class NoteManager : MapElementManager<Note>
         if(objectsOnBeat.Count == 0) return 0;
 
         //Need to recursively calculate the startYs of each note underneath
-        return objectsOnBeat.Max(x => GetStartY(x, objectsOnBeat)) + 1;
+        int maxStartY = 0;
+        for(int i = 0; i < objectsOnBeat.Count; i++)
+        {
+            maxStartY = Mathf.Max(maxStartY, GetStartY(objectsOnBeat[i], objectsOnBeat));
+        }
+        return maxStartY + 1;
     }
 
 
@@ -441,29 +445,57 @@ public class NoteManager : MapElementManager<Note>
 
     public static (float?, float?) GetSnapAngles(List<BeatmapColorNote> sameBeatNotes)
     {
-        List<BeatmapColorNote> redNotes = sameBeatNotes.Where(x => x.c == 0).ToList();
-        List<BeatmapColorNote> blueNotes = sameBeatNotes.Where(x => x.c == 1).ToList();
+        BeatmapColorNote firstRed = null;
+        BeatmapColorNote secondRed = null;
+        int redCount = 0;
+
+        BeatmapColorNote firstBlue = null;
+        BeatmapColorNote secondBlue = null;
+        int blueCount = 0;
+
+        for(int i = 0; i < sameBeatNotes.Count; i++)
+        {
+            BeatmapColorNote note = sameBeatNotes[i];
+            if(note.c == 0)
+            {
+                redCount++;
+                if(redCount == 1)
+                {
+                    firstRed = note;
+                }
+                else if(redCount == 2)
+                {
+                    secondRed = note;
+                }
+            }
+            else if(note.c == 1)
+            {
+                blueCount++;
+                if(blueCount == 1)
+                {
+                    firstBlue = note;
+                }
+                else if(blueCount == 2)
+                {
+                    secondBlue = note;
+                }
+            }
+        }
 
         //Returns the angle the notes should use to snap, or null if they shouldn't
         float? redDesiredAngle = null;
         float? blueDesiredAngle = null;
 
-        if(redNotes.Count == 2)
+        if(redCount == 2)
         {
             //Angle snapping requires exactly 2 notes
-            BeatmapColorNote first = redNotes[0];
-            BeatmapColorNote second = redNotes[1];
-
-            redDesiredAngle = GetAngleSnap(first, second);
+            redDesiredAngle = GetAngleSnap(firstRed, secondRed);
         }
 
-        if(blueNotes.Count == 2)
+        if(blueCount == 2)
         {
             //Angle snapping requires exactly 2 notes
-            BeatmapColorNote first = blueNotes[0];
-            BeatmapColorNote second = blueNotes[1];
-
-            blueDesiredAngle = GetAngleSnap(first, second);
+            blueDesiredAngle = GetAngleSnap(firstBlue, secondBlue);
         }
 
         return (redDesiredAngle, blueDesiredAngle);
