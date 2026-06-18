@@ -73,9 +73,13 @@ public class ZipReader : IMapDataLoader
             return LoadedMap.Empty;
         }
 
+        return new LoadedMap(mapData, null, songResult.Song);
+    }
+
+
+    public byte[] LoadCoverImageData(BeatmapInfo info)
+    {
         Debug.Log("Loading cover image.");
-        MapLoader.LoadingMessage = "Loading cover image";
-        await Task.Yield();
 
         byte[] coverImageData = new byte[0];
         string coverFilename = info.coverImageFilename ?? "";
@@ -95,7 +99,7 @@ public class ZipReader : IMapDataLoader
             }
         }
 
-        return new LoadedMap(mapData, coverImageData, songResult.Song);
+        return coverImageData;
     }
 
 

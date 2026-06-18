@@ -32,6 +32,8 @@ public class MapLoader : MonoBehaviour
     public static event Action OnLoadingFailed;
     public static event Action OnReplayMapPrompt;
 
+    private int coverLoadID;
+
 
     private IEnumerator LoadMapCoroutine(IMapDataLoader loader)
     {
@@ -44,14 +46,69 @@ public class MapLoader : MonoBehaviour
         Debug.Log("Loading complete.");
         LoadingMessage = "Done";
 
-        loader.Dispose();
-
         LoadingMessage = "Initializing";
         //Wait 2 frames to ensure the text updates
         yield return null;
         yield return null;
 
-        SetMap(mapData);
+        int mapCoverLoadID = SetMap(mapData);
+
+        if(loader is ZipReader zipReader && ShouldLoadDeferredZipCover(mapData))
+        {
+            StartCoroutine(LoadZipCoverImageDeferred(zipReader, mapData.Info, mapCoverLoadID));
+        }
+        else loader.Dispose();
+    }
+
+
+    private static bool ShouldLoadDeferredZipCover(LoadedMap mapData)
+    {
+        return mapData.Info != null
+            && mapData.Difficulties != null
+            && mapData.Difficulties.Count > 0
+            && mapData.Song != null;
+    }
+
+
+    private bool IsCurrentCoverLoad(int mapCoverLoadID)
+    {
+        return mapCoverLoadID == coverLoadID && !Loading && UIStateManager.CurrentState == UIState.Previewer;
+    }
+
+
+    private IEnumerator SetCoverImageFromDataDeferred(byte[] coverImageData, int mapCoverLoadID)
+    {
+        yield return null;
+
+        if(!IsCurrentCoverLoad(mapCoverLoadID))
+        {
+            yield break;
+        }
+
+        CoverImageHandler.Instance.SetImageFromData(coverImageData);
+    }
+
+
+    private IEnumerator LoadZipCoverImageDeferred(ZipReader zipReader, BeatmapInfo info, int mapCoverLoadID)
+    {
+        yield return null;
+
+        bool shouldLoadCover = IsCurrentCoverLoad(mapCoverLoadID);
+        try
+        {
+            if(shouldLoadCover)
+            {
+                byte[] coverImageData = zipReader.LoadCoverImageData(info);
+                if(coverImageData != null && coverImageData.Length > 0 && IsCurrentCoverLoad(mapCoverLoadID))
+                {
+                    CoverImageHandler.Instance.SetImageFromData(coverImageData);
+                }
+            }
+        }
+        finally
+        {
+            zipReader.Dispose();
+        }
     }
 
 
@@ -628,8 +685,10 @@ public class MapLoader : MonoBehaviour
     }
 
 
-    private void SetMap(LoadedMap newMap)
+    private int SetMap(LoadedMap newMap)
     {
+        int mapCoverLoadID = ++coverLoadID;
+
         StopAllCoroutines();
         LoadingMessage = "";
         Loading = false;
@@ -650,7 +709,7 @@ public class MapLoader : MonoBehaviour
             UIStateManager.CurrentState = UIState.MapSelection;
             OnLoadingFailed?.Invoke();
 
-            return;
+            return mapCoverLoadID;
         }
 
         UIStateManager.CurrentState = UIState.Previewer;
@@ -658,16 +717,18 @@ public class MapLoader : MonoBehaviour
         BeatmapManager.Info = newMap.Info;
         SongManager.Instance.MusicClip = newMap.Song;
 
+        CoverImageHandler.Instance.ClearImage();
         if(newMap.CoverImageData != null && newMap.CoverImageData.Length > 0)
         {
-            CoverImageHandler.Instance.SetImageFromData(newMap.CoverImageData);
+            StartCoroutine(SetCoverImageFromDataDeferred(newMap.CoverImageData, mapCoverLoadID));
         }
-        else CoverImageHandler.Instance.ClearImage();
 
         BeatmapManager.SetDifficulties(newMap.Difficulties);
         BeatmapManager.CurrentDifficulty = BeatmapManager.GetDefaultDifficulty();
 
         OnMapLoaded?.Invoke();
+
+        return mapCoverLoadID;
     }
 
 
