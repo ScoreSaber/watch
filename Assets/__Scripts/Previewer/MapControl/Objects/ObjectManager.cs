@@ -888,6 +888,8 @@ public class ObjectManager : MonoBehaviour
         TimeManager.OnPlayingChanged += RescheduleHitsounds;
 
         ColorManager.OnColorsChanged += (_) => UpdateColors();
+
+        PreviewerMaterialWarmup.RunOnce(this);
     }
 
 

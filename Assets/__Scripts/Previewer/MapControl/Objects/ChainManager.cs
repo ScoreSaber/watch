@@ -37,6 +37,55 @@ public class ChainManager : MapElementManager<ChainLink>
     }
 
 
+    public ChainLinkHandler CreateWarmupVisual(Transform parent, Vector3 localPosition)
+    {
+        NoteManager targetNoteManager = noteManager;
+        if(chainLinkPool == null || targetNoteManager == null)
+        {
+            return null;
+        }
+
+        Material material = objectManager.useSimpleNoteMaterial ? targetNoteManager.simpleMaterial : targetNoteManager.complexMaterial;
+        if(material == null)
+        {
+            return null;
+        }
+
+        targetNoteManager.PrepareWarmupMaterialProperties();
+
+        ChainLinkHandler chainLinkHandler = chainLinkPool.GetObject();
+        chainLinkHandler.transform.SetParent(parent);
+        chainLinkHandler.transform.localPosition = localPosition;
+        chainLinkHandler.transform.localRotation = Quaternion.identity;
+        chainLinkHandler.transform.localScale = Vector3.one;
+        chainLinkHandler.gameObject.SetActive(true);
+
+        chainLinkHandler.SetMaterial(material);
+        chainLinkHandler.SetProperties(targetNoteManager.blueNoteProperties);
+        chainLinkHandler.SetDotProperties(targetNoteManager.blueArrowProperties);
+        chainLinkHandler.SetOutline(false);
+        chainLinkHandler.EnableVisual();
+
+        return chainLinkHandler;
+    }
+
+
+    public void ReleaseWarmupVisual(ChainLinkHandler chainLinkHandler)
+    {
+        if(chainLinkHandler == null)
+        {
+            return;
+        }
+
+        if(chainLinkHandler.audioSource != null)
+        {
+            chainLinkHandler.audioSource.Stop();
+        }
+        chainLinkHandler.DisableVisual();
+        chainLinkPool.ReleaseObject(chainLinkHandler);
+    }
+
+
     private void CreateChainLinks(Chain c, ScoringEventObjectTimeLookup scoringEventLookup)
     {
         //These are the start and end points of the bezier curve

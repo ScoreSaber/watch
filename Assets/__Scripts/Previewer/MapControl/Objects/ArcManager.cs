@@ -51,17 +51,82 @@ public class ArcManager : MapElementManager<Arc>
     {
         ClearRenderedVisuals();
 
+        SetArcMaterialProperties(BeatmapManager.HalfJumpDistance);
+
+        UpdateVisuals();
+    }
+
+
+    public void PrepareWarmupMaterialProperties()
+    {
+        SetArcMaterialProperties(Mathf.Max(BeatmapManager.HalfJumpDistance, 1f));
+    }
+
+
+    private void SetArcMaterialProperties(float halfJumpDistance)
+    {
+        if(redArcMaterialProperties == null) redArcMaterialProperties = new MaterialPropertyBlock();
+        if(blueArcMaterialProperties == null) blueArcMaterialProperties = new MaterialPropertyBlock();
+
         //Sets the distance that arcs should fade out
         const float fadeDistMultiplier = 0.8f;
-        float fadeDist = BeatmapManager.HalfJumpDistance * fadeDistMultiplier;
+        float fadeDist = halfJumpDistance * fadeDistMultiplier;
 
         redArcMaterialProperties.SetFloat("_FadeEndPoint", fadeDist);
         redArcMaterialProperties.SetFloat("_FadeTransitionLength", arcFadeTransitionLength);
 
         blueArcMaterialProperties.SetFloat("_FadeEndPoint", fadeDist);
         blueArcMaterialProperties.SetFloat("_FadeTransitionLength", arcFadeTransitionLength);
+    }
 
-        UpdateVisuals();
+
+    public ArcHandler CreateWarmupVisual(Transform parent, Vector3 localPosition)
+    {
+        if(arcPool == null || arcMaterial == null)
+        {
+            return null;
+        }
+
+        PrepareWarmupMaterialProperties();
+
+        ArcHandler arcHandler = arcPool.GetObject();
+        arcHandler.transform.SetParent(parent);
+        arcHandler.transform.localPosition = localPosition;
+        arcHandler.transform.localRotation = Quaternion.identity;
+        arcHandler.transform.localScale = Vector3.one;
+        arcHandler.gameObject.SetActive(true);
+
+        Vector3[] points =
+        {
+            new Vector3(-0.3f, -0.15f, 0f),
+            new Vector3(0f, 0.2f, 1f),
+            new Vector3(0.3f, -0.15f, 2f)
+        };
+
+        float width = Mathf.Clamp01(SettingsManager.GetFloat("arcwidth")) / 2;
+        if(width <= 0f)
+        {
+            width = 0.05f;
+        }
+
+        arcHandler.SetMaterial(arcMaterial, redArcMaterialProperties);
+        arcHandler.SetArcPoints(points);
+        arcHandler.SetGradient(2f, arcEndFadeStart, arcEndFadeEnd);
+        arcHandler.SetWidth(width);
+        arcHandler.SetProperties(Mathf.Max(0.1f, Mathf.Clamp(SettingsManager.GetFloat("arcbrightness"), 0f, 2f)), 0.5f, redArcColor, objectManager.CutPlanePos);
+
+        return arcHandler;
+    }
+
+
+    public void ReleaseWarmupVisual(ArcHandler arcHandler)
+    {
+        if(arcHandler == null)
+        {
+            return;
+        }
+
+        arcPool.ReleaseObject(arcHandler);
     }
 
 

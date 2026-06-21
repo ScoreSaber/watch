@@ -36,6 +36,39 @@ public class WallManager : MapElementManager<Wall>
     }
 
 
+    public WallHandler CreateWarmupVisual(Transform parent, Vector3 localPosition)
+    {
+        if(wallPool == null)
+        {
+            return null;
+        }
+
+        WallHandler wallHandler = wallPool.GetObject();
+        wallHandler.transform.SetParent(parent);
+        wallHandler.transform.localPosition = localPosition;
+        wallHandler.transform.localRotation = Quaternion.identity;
+        wallHandler.transform.localScale = Vector3.one;
+        wallHandler.gameObject.SetActive(true);
+
+        wallHandler.SetColor(WallColor);
+        wallHandler.SetAlpha(Mathf.Clamp01(SettingsManager.GetFloat("wallopacity")));
+        wallHandler.SetScale(new Vector3(ObjectManager.LaneWidth, ObjectManager.RowHeight * 2, 1f));
+
+        return wallHandler;
+    }
+
+
+    public void ReleaseWarmupVisual(WallHandler wallHandler)
+    {
+        if(wallHandler == null)
+        {
+            return;
+        }
+
+        wallPool.ReleaseObject(wallHandler);
+    }
+
+
     public override void UpdateVisual(Wall w)
     {
         float reactionTime = w.CustomRT ?? jumpManager.ReactionTime;

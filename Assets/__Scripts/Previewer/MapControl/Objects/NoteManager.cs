@@ -72,6 +72,63 @@ public class NoteManager : MapElementManager<Note>
     }
 
 
+    public void PrepareWarmupMaterialProperties()
+    {
+        if(redNoteProperties == null) redNoteProperties = new MaterialPropertyBlock();
+        if(blueNoteProperties == null) blueNoteProperties = new MaterialPropertyBlock();
+        if(redArrowProperties == null) redArrowProperties = new MaterialPropertyBlock();
+        if(blueArrowProperties == null) blueArrowProperties = new MaterialPropertyBlock();
+
+        SetNoteMaterialProperties(ref redNoteProperties, ref redArrowProperties, RedNoteColor);
+        SetNoteMaterialProperties(ref blueNoteProperties, ref blueArrowProperties, BlueNoteColor);
+    }
+
+
+    public NoteHandler CreateWarmupVisual(Transform parent, Vector3 localPosition, bool useArrow)
+    {
+        Material material = objectManager.useSimpleNoteMaterial ? simpleMaterial : complexMaterial;
+        if(notePool == null || noteMesh == null || material == null)
+        {
+            return null;
+        }
+
+        PrepareWarmupMaterialProperties();
+
+        NoteHandler noteHandler = notePool.GetObject();
+        noteHandler.transform.SetParent(parent);
+        noteHandler.transform.localPosition = localPosition;
+        noteHandler.transform.localRotation = Quaternion.identity;
+        noteHandler.transform.localScale = Vector3.one;
+        noteHandler.gameObject.SetActive(true);
+
+        noteHandler.SetMesh(noteMesh);
+        noteHandler.SetArrow(useArrow);
+        noteHandler.SetMaterial(material);
+        noteHandler.SetProperties(redNoteProperties);
+        noteHandler.SetArrowProperties(redArrowProperties);
+        noteHandler.SetOutline(false);
+        noteHandler.EnableVisual();
+
+        return noteHandler;
+    }
+
+
+    public void ReleaseWarmupVisual(NoteHandler noteHandler)
+    {
+        if(noteHandler == null)
+        {
+            return;
+        }
+
+        if(noteHandler.audioSource != null)
+        {
+            noteHandler.audioSource.Stop();
+        }
+        noteHandler.DisableVisual();
+        notePool.ReleaseObject(noteHandler);
+    }
+
+
     public void SetNoteMaterialProperties(ref MaterialPropertyBlock noteProperties, ref MaterialPropertyBlock arrowProperties, Color baseColor)
     {
         float h, s, v;
