@@ -51,6 +51,7 @@ public class MapLoader : MonoBehaviour
         yield return null;
         yield return null;
 
+        TryLoadEnvironmentEarly(mapData);
         int mapCoverLoadID = SetMap(mapData);
 
         if(loader is ZipReader zipReader && ShouldLoadDeferredZipCover(mapData))
@@ -58,6 +59,47 @@ public class MapLoader : MonoBehaviour
             StartCoroutine(LoadZipCoverImageDeferred(zipReader, mapData.Info, mapCoverLoadID));
         }
         else loader.Dispose();
+    }
+
+
+    private static void TryLoadEnvironmentEarly(LoadedMap mapData)
+    {
+        if(mapData == null || mapData.Info == null || mapData.Difficulties == null || mapData.Difficulties.Count == 0 || mapData.Song == null)
+        {
+            return;
+        }
+
+        EnvironmentManager.TryLoadEnvironmentForDifficulty(GetDefaultDifficulty(mapData.Difficulties));
+    }
+
+
+    private static Difficulty GetDefaultDifficulty(List<Difficulty> difficulties)
+    {
+        List<Difficulty> sortedDifficulties = difficulties.OrderBy(x => x.difficultyRank).ToList();
+        IEnumerable<DifficultyCharacteristic> characteristics = Enum.GetValues(typeof(DifficultyCharacteristic)).Cast<DifficultyCharacteristic>();
+        foreach(DifficultyCharacteristic characteristic in characteristics)
+        {
+            Difficulty difficulty = null;
+            foreach(Difficulty candidate in sortedDifficulties)
+            {
+                if(candidate.characteristic != characteristic)
+                {
+                    continue;
+                }
+
+                if(difficulty == null || candidate.difficultyRank > difficulty.difficultyRank)
+                {
+                    difficulty = candidate;
+                }
+            }
+
+            if(difficulty != null)
+            {
+                return difficulty;
+            }
+        }
+
+        return Difficulty.Empty;
     }
 
 

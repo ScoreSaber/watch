@@ -7,6 +7,7 @@ using UnityEngine.SceneManagement;
 
 public class EnvironmentManager : MonoBehaviour
 {
+    private static EnvironmentManager _instance;
     private static bool _loading;
     public static bool Loading
     {
@@ -28,6 +29,18 @@ public class EnvironmentManager : MonoBehaviour
     }
 
     public static event Action<int> OnEnvironmentUpdated;
+
+
+    public static bool TryLoadEnvironmentForDifficulty(Difficulty difficulty)
+    {
+        if(_instance == null || difficulty == null)
+        {
+            return false;
+        }
+
+        _instance.LoadEnvironmentForDifficulty(difficulty);
+        return true;
+    }
 
     public static readonly string[] V2Environments = new string[]
     {
@@ -207,9 +220,20 @@ public class EnvironmentManager : MonoBehaviour
     }
 
 
-    private void UpdateDifficulty(Difficulty difficulty)
+    private static string GetEnvironmentName(Difficulty difficulty)
     {
-        string environmentName = BeatmapManager.EnvironmentName;
+        if(difficulty == BeatmapManager.CurrentDifficulty)
+        {
+            return BeatmapManager.EnvironmentName;
+        }
+
+        return difficulty.environmentName;
+    }
+
+
+    private void LoadEnvironmentForDifficulty(Difficulty difficulty)
+    {
+        string environmentName = GetEnvironmentName(difficulty);
         Debug.Log($"Map has environment: {environmentName}");
 
         if(duplicateEnvironments.ContainsKey(environmentName))
@@ -232,12 +256,24 @@ public class EnvironmentManager : MonoBehaviour
     }
 
 
+    private void UpdateDifficulty(Difficulty difficulty)
+    {
+        LoadEnvironmentForDifficulty(difficulty);
+    }
+
+
     private void UpdateSettings(string setting)
     {
         if(setting == "all" || setting == "environmentoverride" || setting == "customenvironment")
         {
             SetEnvironment(BeatmapManager.EnvironmentName);
         }
+    }
+
+
+    private void Awake()
+    {
+        _instance = this;
     }
 
 
