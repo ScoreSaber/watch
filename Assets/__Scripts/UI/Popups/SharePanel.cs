@@ -11,6 +11,19 @@ public class SharePanel : MonoBehaviour
     [SerializeField] private Toggle timeStampToggle;
     [SerializeField] private TextMeshProUGUI timeStampToggleLabel;
 
+    private bool hasCachedUrlState;
+    private ulong cachedUrlTime = ulong.MaxValue;
+    private bool cachedUrlUseTimestamp;
+    private bool cachedUrlReplayMode;
+    private bool cachedUrlIgnoreMapForSharing;
+    private string cachedUrlReplayID;
+    private string cachedUrlReplayURL;
+    private string cachedUrlMapID;
+    private string cachedUrlMapURL;
+    private DifficultyCharacteristic? cachedUrlCharacteristic;
+    private DifficultyRank? cachedUrlDiffRank;
+    private ulong cachedToggleLabelTime = ulong.MaxValue;
+
 
     public void SetEnableTimestamp(bool timestamp)
     {
@@ -18,19 +31,56 @@ public class SharePanel : MonoBehaviour
     }
 
 
-    private void UpdateText()
+    private void UpdateText(ulong currentTime)
     {
+        ulong urlTime = UseTimestamp ? currentTime : ulong.MaxValue;
+        bool replayMode = ReplayManager.IsReplayMode;
+        bool ignoreMapForSharing = UrlArgHandler.ignoreMapForSharing;
+        string loadedReplayID = UrlArgHandler.LoadedReplayID;
+        string loadedReplayURL = UrlArgHandler.LoadedReplayURL;
+        string loadedMapID = UrlArgHandler.LoadedMapID;
+        string loadedMapURL = UrlArgHandler.LoadedMapURL;
+        DifficultyCharacteristic? loadedCharacteristic = UrlArgHandler.LoadedCharacteristic;
+        DifficultyRank? loadedDiffRank = UrlArgHandler.LoadedDiffRank;
+
+        if(hasCachedUrlState
+            && cachedUrlTime == urlTime
+            && cachedUrlUseTimestamp == UseTimestamp
+            && cachedUrlReplayMode == replayMode
+            && cachedUrlIgnoreMapForSharing == ignoreMapForSharing
+            && cachedUrlReplayID == loadedReplayID
+            && cachedUrlReplayURL == loadedReplayURL
+            && cachedUrlMapID == loadedMapID
+            && cachedUrlMapURL == loadedMapURL
+            && cachedUrlCharacteristic == loadedCharacteristic
+            && cachedUrlDiffRank == loadedDiffRank)
+        {
+            return;
+        }
+
+        hasCachedUrlState = true;
+        cachedUrlTime = urlTime;
+        cachedUrlUseTimestamp = UseTimestamp;
+        cachedUrlReplayMode = replayMode;
+        cachedUrlIgnoreMapForSharing = ignoreMapForSharing;
+        cachedUrlReplayID = loadedReplayID;
+        cachedUrlReplayURL = loadedReplayURL;
+        cachedUrlMapID = loadedMapID;
+        cachedUrlMapURL = loadedMapURL;
+        cachedUrlCharacteristic = loadedCharacteristic;
+        cachedUrlDiffRank = loadedDiffRank;
+
         string newText = UrlArgHandler.ArcViewerURL;
 
-        if(ReplayManager.IsReplayMode)
+        if(replayMode)
         {
-            if(!string.IsNullOrEmpty(UrlArgHandler.LoadedReplayID))
+            if(!string.IsNullOrEmpty(loadedReplayID))
             {
-                newText += $"?scoreID={UrlArgHandler.LoadedReplayID}";
+                newText += $"?scoreID={loadedReplayID}";
             }
-            else if(!string.IsNullOrEmpty(UrlArgHandler.LoadedReplayURL))
+            else if(!string.IsNullOrEmpty(loadedReplayURL))
             {
-                newText += $"?replayURL={HttpUtility.UrlEncode(UrlArgHandler.LoadedReplayURL)}";
+                newText += $"?replayURL={HttpUtility.UrlEncode(loadedReplayURL)}";
             }
             else
             {
@@ -39,21 +89,21 @@ public class SharePanel : MonoBehaviour
                 return;
             }
 
-            if(!UrlArgHandler.ignoreMapForSharing && !string.IsNullOrEmpty(UrlArgHandler.LoadedMapURL))
+            if(!ignoreMapForSharing && !string.IsNullOrEmpty(loadedMapURL))
             {
                 //Include custom set map for replays
-                newText += $"&url={HttpUtility.UrlEncode(UrlArgHandler.LoadedMapURL)}";
+                newText += $"&url={HttpUtility.UrlEncode(loadedMapURL)}";
             }
         }
         else
         {
-            if(!string.IsNullOrEmpty(UrlArgHandler.LoadedMapID))
+            if(!string.IsNullOrEmpty(loadedMapID))
             {
-                newText += $"?id={UrlArgHandler.LoadedMapID}";
+                newText += $"?id={loadedMapID}";
             }
-            else if(!string.IsNullOrEmpty(UrlArgHandler.LoadedMapURL))
+            else if(!string.IsNullOrEmpty(loadedMapURL))
             {
-                newText += $"?url={HttpUtility.UrlEncode(UrlArgHandler.LoadedMapURL)}";
+                newText += $"?url={HttpUtility.UrlEncode(loadedMapURL)}";
             }
             else
             {
@@ -63,8 +113,8 @@ public class SharePanel : MonoBehaviour
             }
 
             //Only include difficulty arguments outside of replays
-            string mode = UrlArgHandler.LoadedCharacteristic?.ToString() ?? "";
-            string difficulty = UrlArgHandler.LoadedDiffRank?.ToString() ?? "";
+            string mode = loadedCharacteristic?.ToString() ?? "";
+            string difficulty = loadedDiffRank?.ToString() ?? "";
 
             if(!string.IsNullOrEmpty(mode))
             {
@@ -78,7 +128,7 @@ public class SharePanel : MonoBehaviour
 
         if(UseTimestamp)
         {
-            float time = (ulong)TimeManager.CurrentTime;
+            float time = currentTime;
             newText += $"&t={time}";
         }
 
@@ -89,9 +139,14 @@ public class SharePanel : MonoBehaviour
     }
 
 
-    private void UpdateToggleLabel()
+    private void UpdateToggleLabel(ulong currentTime)
     {
-        ulong currentTime = (ulong)TimeManager.CurrentTime;
+        if(cachedToggleLabelTime == currentTime)
+        {
+            return;
+        }
+
+        cachedToggleLabelTime = currentTime;
         ulong currentSeconds = currentTime % 60;
         ulong currentMinutes = currentTime / 60;
 
@@ -105,8 +160,10 @@ public class SharePanel : MonoBehaviour
 
     private void Update()
     {
-        UpdateText();
-        UpdateToggleLabel();
+        ulong currentTime = (ulong)TimeManager.CurrentTime;
+
+        UpdateText(currentTime);
+        UpdateToggleLabel(currentTime);
     }
 
 

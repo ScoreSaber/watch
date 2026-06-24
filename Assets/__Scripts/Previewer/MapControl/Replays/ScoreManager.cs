@@ -89,6 +89,7 @@ public class ScoreManager : MonoBehaviour
     private float cachedScorePercentage = float.NaN;
     private float cachedFCPercentage = float.NaN;
     private float cachedGradePercentage = float.NaN;
+    private float cachedEnergyBarFillWidth = float.NaN;
     private bool cachedFullCombo;
     private bool hasCachedFullCombo;
 
@@ -317,6 +318,7 @@ public class ScoreManager : MonoBehaviour
         cachedScorePercentage = float.NaN;
         cachedFCPercentage = float.NaN;
         cachedGradePercentage = float.NaN;
+        cachedEnergyBarFillWidth = float.NaN;
         hasCachedFullCombo = false;
     }
 
@@ -597,7 +599,12 @@ public class ScoreManager : MonoBehaviour
             effectivePercentage);
 
         float healthBarWidth = energyBar.sizeDelta.x;
-        energyBarFill.sizeDelta = new Vector2(healthBarWidth * PlayerPositionManager.Energy, energyBarFill.sizeDelta.y);
+        float energyBarFillWidth = healthBarWidth * PlayerPositionManager.Energy;
+        if(cachedEnergyBarFillWidth != energyBarFillWidth)
+        {
+            cachedEnergyBarFillWidth = energyBarFillWidth;
+            energyBarFill.sizeDelta = new Vector2(energyBarFillWidth, energyBarFill.sizeDelta.y);
+        }
     }
 
 

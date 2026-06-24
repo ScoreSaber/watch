@@ -15,6 +15,7 @@ public class FpsDisplay : MonoBehaviour
 
     private int checkedFrameCount;
     private float timeSinceFramerateUpdate;
+    private int cachedReplayFPS = int.MinValue;
 
 
     private void SetCountersActive()
@@ -24,6 +25,7 @@ public class FpsDisplay : MonoBehaviour
 
         checkedFrameCount = 0;
         timeSinceFramerateUpdate = 0f;
+        cachedReplayFPS = int.MinValue;
     }
 
 
@@ -47,7 +49,12 @@ public class FpsDisplay : MonoBehaviour
     {
         if(showReplayFPS)
         {
-            replayFpsCounter.text = "Replay: " + PlayerPositionManager.AverageFPS;
+            int averageFPS = PlayerPositionManager.AverageFPS;
+            if(cachedReplayFPS != averageFPS)
+            {
+                cachedReplayFPS = averageFPS;
+                replayFpsCounter.text = "Replay: " + averageFPS;
+            }
         }
     }
 
