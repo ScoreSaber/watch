@@ -4,9 +4,10 @@ public class WebSongClip : IDisposable
 {
     public bool IsPlaying => isPlaying;
 
-    public float Length => WebSongController.GetSongLength();
+    public float Length => length;
 
     private bool isPlaying = false;
+    private float length = 0f;
 
     public float Time => WebSongController.GetSongTime();
 
@@ -24,6 +25,7 @@ public class WebSongClip : IDisposable
 
     public void Dispose()
     {
+        length = 0f;
 #if UNITY_WEBGL && !UNITY_EDITOR
         Stop();
 #endif
@@ -35,13 +37,19 @@ public class WebSongClip : IDisposable
 #if UNITY_WEBGL && !UNITY_EDITOR
     public void SetData(byte[] data, bool isOgg, Action<int> callback)
     {
-        WebSongController.SetDataClip(data, isOgg, callback);
+        length = 0f;
+        WebSongController.SetDataClip(data, isOgg, response =>
+        {
+            length = response > 0 ? WebSongController.GetSongLength() : 0f;
+            callback?.Invoke(response);
+        });
     }
 
 
     public void SetOffset(float offset)
     {
         WebSongController.SetSongOffset(offset);
+        length = WebSongController.GetSongLength();
     }
 
 
