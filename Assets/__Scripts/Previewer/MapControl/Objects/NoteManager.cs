@@ -28,14 +28,30 @@ public class NoteManager : MapElementManager<Note>
     [SerializeField, Range(0f, 1f)] private float arrowGlowSaturation;
     [SerializeField] private float arrowEmission;
 
-    //These are all public so ChainManager can access them
-    public MaterialPropertyBlock redNoteProperties;
-    public MaterialPropertyBlock blueNoteProperties;
-    public MaterialPropertyBlock redArrowProperties;
-    public MaterialPropertyBlock blueArrowProperties;
+    private readonly Dictionary<Material, SharedNoteMaterials> noteMaterials = new Dictionary<Material, SharedNoteMaterials>();
+    private readonly Dictionary<Material, SharedNoteMaterials> arrowMaterials = new Dictionary<Material, SharedNoteMaterials>();
 
     private Note firstLeftNote;
     private Note firstRightNote;
+
+    private bool materialCacheCurrent;
+    private bool cachedSimpleNoteMaterial;
+    private Color cachedRedNoteColor;
+    private Color cachedBlueNoteColor;
+    private float cachedNoteEmission;
+    private float cachedSimpleNoteSaturation;
+    private float cachedSimpleNoteEmission;
+    private float cachedArrowSaturation;
+    private float cachedArrowBrightness;
+    private float cachedArrowGlowSaturation;
+    private float cachedArrowEmission;
+
+
+    private class SharedNoteMaterials
+    {
+        public Material red;
+        public Material blue;
+    }
 
 
     public void ReloadNotes()
@@ -64,23 +80,40 @@ public class NoteManager : MapElementManager<Note>
     public void UpdateMaterials()
     {
         ClearRenderedVisuals();
-
-        SetNoteMaterialProperties(ref redNoteProperties, ref redArrowProperties, RedNoteColor);
-        SetNoteMaterialProperties(ref blueNoteProperties, ref blueArrowProperties, BlueNoteColor);
+        ClearSharedMaterialCache();
 
         UpdateVisuals();
     }
 
 
-    public void PrepareWarmupMaterialProperties()
+    public void SetSharedMaterials(NoteHandler noteHandler, bool isRed)
     {
-        if(redNoteProperties == null) redNoteProperties = new MaterialPropertyBlock();
-        if(blueNoteProperties == null) blueNoteProperties = new MaterialPropertyBlock();
-        if(redArrowProperties == null) redArrowProperties = new MaterialPropertyBlock();
-        if(blueArrowProperties == null) blueArrowProperties = new MaterialPropertyBlock();
+        Material noteMaterial = objectManager.useSimpleNoteMaterial ? simpleMaterial : complexMaterial;
+        noteHandler.SetSharedMaterials(
+            GetSharedMaterial(noteMaterials, noteMaterial, isRed, false),
+            GetSharedMaterial(arrowMaterials, noteHandler.BaseArrowMaterial, isRed, true),
+            GetSharedMaterial(arrowMaterials, noteHandler.BaseDotMaterial, isRed, true));
+    }
 
-        SetNoteMaterialProperties(ref redNoteProperties, ref redArrowProperties, RedNoteColor);
-        SetNoteMaterialProperties(ref blueNoteProperties, ref blueArrowProperties, BlueNoteColor);
+
+    public void SetCustomMaterials(NoteHandler noteHandler)
+    {
+        noteHandler.SetCustomMaterials(objectManager.useSimpleNoteMaterial ? simpleMaterial : complexMaterial);
+    }
+
+
+    public void SetSharedMaterials(ChainLinkHandler chainLinkHandler, bool isRed)
+    {
+        Material noteMaterial = objectManager.useSimpleNoteMaterial ? simpleMaterial : complexMaterial;
+        chainLinkHandler.SetSharedMaterials(
+            GetSharedMaterial(noteMaterials, noteMaterial, isRed, false),
+            GetSharedMaterial(arrowMaterials, chainLinkHandler.BaseDotMaterial, isRed, true));
+    }
+
+
+    public void SetCustomMaterials(ChainLinkHandler chainLinkHandler)
+    {
+        chainLinkHandler.SetCustomMaterials(objectManager.useSimpleNoteMaterial ? simpleMaterial : complexMaterial);
     }
 
 
@@ -92,8 +125,6 @@ public class NoteManager : MapElementManager<Note>
             return null;
         }
 
-        PrepareWarmupMaterialProperties();
-
         NoteHandler noteHandler = notePool.GetObject();
         noteHandler.transform.SetParent(parent);
         noteHandler.transform.localPosition = localPosition;
@@ -103,9 +134,7 @@ public class NoteManager : MapElementManager<Note>
 
         noteHandler.SetMesh(noteMesh);
         noteHandler.SetArrow(useArrow);
-        noteHandler.SetMaterial(material);
-        noteHandler.SetProperties(redNoteProperties);
-        noteHandler.SetArrowProperties(redArrowProperties);
+        SetSharedMaterials(noteHandler, true);
         noteHandler.SetOutline(false);
         noteHandler.EnableVisual();
 
@@ -131,16 +160,128 @@ public class NoteManager : MapElementManager<Note>
 
     public void SetNoteMaterialProperties(ref MaterialPropertyBlock noteProperties, ref MaterialPropertyBlock arrowProperties, Color baseColor)
     {
+        if(noteProperties == null) noteProperties = new MaterialPropertyBlock();
+        if(arrowProperties == null) arrowProperties = new MaterialPropertyBlock();
+
+        Color noteBaseColor, noteEmissionColor, arrowBaseColor, arrowEmissionColor;
+        GetMaterialColors(baseColor, out noteBaseColor, out noteEmissionColor, out arrowBaseColor, out arrowEmissionColor);
+
+        noteProperties.SetColor("_BaseColor", noteBaseColor);
+        noteProperties.SetColor("_EmissionColor", noteEmissionColor);
+
+        arrowProperties.SetColor("_BaseColor", arrowBaseColor);
+        arrowProperties.SetColor("_EmissionColor", arrowEmissionColor);
+    }
+
+
+    private Material GetSharedMaterial(Dictionary<Material, SharedNoteMaterials> materials, Material baseMaterial, bool isRed, bool isArrow)
+    {
+        if(baseMaterial == null)
+        {
+            return null;
+        }
+
+        EnsureMaterialCacheCurrent();
+
+        if(!materials.TryGetValue(baseMaterial, out SharedNoteMaterials sharedMaterials))
+        {
+            sharedMaterials = new SharedNoteMaterials();
+            materials[baseMaterial] = sharedMaterials;
+        }
+
+        Material material = isRed ? sharedMaterials.red : sharedMaterials.blue;
+        if(material == null)
+        {
+            material = new Material(baseMaterial);
+            SetMaterialProperties(material, isRed ? RedNoteColor : BlueNoteColor, isArrow);
+
+            if(isRed) sharedMaterials.red = material;
+            else sharedMaterials.blue = material;
+        }
+
+        return material;
+    }
+
+
+    private void SetMaterialProperties(Material material, Color baseColor, bool isArrow)
+    {
+        Color noteBaseColor, noteEmissionColor, arrowBaseColor, arrowEmissionColor;
+        GetMaterialColors(baseColor, out noteBaseColor, out noteEmissionColor, out arrowBaseColor, out arrowEmissionColor);
+
+        material.SetColor("_BaseColor", isArrow ? arrowBaseColor : noteBaseColor);
+        material.SetColor("_EmissionColor", isArrow ? arrowEmissionColor : noteEmissionColor);
+    }
+
+
+    private void GetMaterialColors(Color baseColor, out Color noteBaseColor, out Color noteEmissionColor, out Color arrowBaseColor, out Color arrowEmissionColor)
+    {
         float h, s, v;
         Color.RGBToHSV(baseColor, out h, out s, out v);
 
         float saturation = objectManager.useSimpleNoteMaterial ? simpleNoteSaturation : 1f;
         float emission = objectManager.useSimpleNoteMaterial ? simpleNoteEmission : noteEmission;
-        noteProperties.SetColor("_BaseColor", baseColor.SetSaturation(saturation * s));
-        noteProperties.SetColor("_EmissionColor", baseColor.SetHSV(null, saturation * s, emission * v, true));
+        noteBaseColor = baseColor.SetSaturation(saturation * s);
+        noteEmissionColor = baseColor.SetHSV(null, saturation * s, emission * v, true);
 
-        arrowProperties.SetColor("_BaseColor", baseColor.SetHSV(null, arrowSaturation * s, arrowBrightness * v));
-        arrowProperties.SetColor("_EmissionColor", baseColor.SetHSV(null, arrowGlowSaturation * s, arrowEmission, true));
+        arrowBaseColor = baseColor.SetHSV(null, arrowSaturation * s, arrowBrightness * v);
+        arrowEmissionColor = baseColor.SetHSV(null, arrowGlowSaturation * s, arrowEmission, true);
+    }
+
+
+    private void ClearSharedMaterialCache()
+    {
+        ClearSharedMaterials(noteMaterials);
+        ClearSharedMaterials(arrowMaterials);
+        materialCacheCurrent = false;
+    }
+
+
+    private void ClearSharedMaterials(Dictionary<Material, SharedNoteMaterials> materials)
+    {
+        foreach(SharedNoteMaterials sharedMaterials in materials.Values)
+        {
+            if(sharedMaterials.red != null) Destroy(sharedMaterials.red);
+            if(sharedMaterials.blue != null) Destroy(sharedMaterials.blue);
+        }
+
+        materials.Clear();
+    }
+
+
+    private void EnsureMaterialCacheCurrent()
+    {
+        bool simpleNoteMaterial = objectManager.useSimpleNoteMaterial;
+        Color redNoteColor = RedNoteColor;
+        Color blueNoteColor = BlueNoteColor;
+
+        if(materialCacheCurrent
+            && cachedSimpleNoteMaterial == simpleNoteMaterial
+            && cachedRedNoteColor == redNoteColor
+            && cachedBlueNoteColor == blueNoteColor
+            && cachedNoteEmission == noteEmission
+            && cachedSimpleNoteSaturation == simpleNoteSaturation
+            && cachedSimpleNoteEmission == simpleNoteEmission
+            && cachedArrowSaturation == arrowSaturation
+            && cachedArrowBrightness == arrowBrightness
+            && cachedArrowGlowSaturation == arrowGlowSaturation
+            && cachedArrowEmission == arrowEmission)
+        {
+            return;
+        }
+
+        ClearSharedMaterialCache();
+
+        cachedSimpleNoteMaterial = simpleNoteMaterial;
+        cachedRedNoteColor = redNoteColor;
+        cachedBlueNoteColor = blueNoteColor;
+        cachedNoteEmission = noteEmission;
+        cachedSimpleNoteSaturation = simpleNoteSaturation;
+        cachedSimpleNoteEmission = simpleNoteEmission;
+        cachedArrowSaturation = arrowSaturation;
+        cachedArrowBrightness = arrowBrightness;
+        cachedArrowGlowSaturation = arrowGlowSaturation;
+        cachedArrowEmission = arrowEmission;
+        materialCacheCurrent = true;
     }
 
 
@@ -211,18 +352,16 @@ public class NoteManager : MapElementManager<Note>
             n.NoteHandler.SetMesh(n.IsChainHead ? chainHeadMesh : noteMesh);
             n.NoteHandler.SetArrow(!n.IsDot);
 
-            n.NoteHandler.SetMaterial(objectManager.useSimpleNoteMaterial ? simpleMaterial : complexMaterial);
             if(SettingsManager.GetBool("chromaobjectcolors") && n.CustomColor != null)
             {
                 //This note uses a unique chroma color
+                SetCustomMaterials(n.NoteHandler);
                 n.NoteHandler.SetProperties(n.CustomNoteProperties);
                 n.NoteHandler.SetArrowProperties(n.CustomArrowProperties);
             }
             else
             {
-                bool isRed = n.Color == 0;
-                n.NoteHandler.SetProperties(isRed ? redNoteProperties : blueNoteProperties);
-                n.NoteHandler.SetArrowProperties(isRed ? redArrowProperties : blueArrowProperties);
+                SetSharedMaterials(n.NoteHandler, n.Color == 0);
             }
 
             float noteSize = Mathf.Clamp(SettingsManager.GetFloat("notesize"), 0.5f, 1f);
@@ -648,12 +787,9 @@ public class NoteManager : MapElementManager<Note>
     }
 
 
-    private void Awake()
+    private void OnDestroy()
     {
-        redNoteProperties = new MaterialPropertyBlock();
-        blueNoteProperties = new MaterialPropertyBlock();
-        redArrowProperties = new MaterialPropertyBlock();
-        blueArrowProperties = new MaterialPropertyBlock();
+        ClearSharedMaterialCache();
     }
 }
 

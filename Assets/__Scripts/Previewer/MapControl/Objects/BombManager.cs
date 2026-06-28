@@ -8,7 +8,10 @@ public class BombManager : MapElementManager<Bomb>
     [SerializeField] private Material complexMaterial;
     [SerializeField] private Material simpleMaterial;
 
-    private static bool playBadCutSound => TimeManager.Playing && SettingsManager.GetBool("usebadhitsound") && SettingsManager.GetFloat("hitsoundvolume") > 0;
+    private Material complexRuntimeMaterial;
+    private Material simpleRuntimeMaterial;
+
+    private static bool playBadCutSound => TimeManager.Playing && SettingsManager.GetBool("usebadhitsound") && HitSoundManager.HitSoundsEnabled;
 
 
     public void ReloadBombs()
@@ -30,6 +33,7 @@ public class BombManager : MapElementManager<Bomb>
         CustomRTObjects.ResetStartIndex();
 
         ClearRenderedVisuals();
+        ClearSharedMaterialCache();
         UpdateVisuals();
     }
 
@@ -63,17 +67,12 @@ public class BombManager : MapElementManager<Bomb>
             visualTransform.SetParent(transform);
             b.BombHandler.EnableVisual();
 
-            b.BombHandler.SetMaterial(objectManager.useSimpleBombMaterial ? simpleMaterial : complexMaterial);
+            b.BombHandler.SetMaterial(GetSharedMaterial());
 
             if(SettingsManager.GetBool("chromaobjectcolors") && b.CustomColor != null)
             {
                 //This bomb has a unique chroma color
                 b.BombHandler.SetProperties(b.CustomMaterialProperties);
-            }
-            else if(b.BombHandler.HasCustomProperties)
-            {
-                //This bomb has no custom color, so properties should be cleared
-                b.BombHandler.ClearProperties();
             }
 
             if(b.WasHit && playBadCutSound)
@@ -191,6 +190,43 @@ public class BombManager : MapElementManager<Bomb>
                 HitSoundManager.ScheduleHitsound(b);
             }
         }
+    }
+
+
+    private Material GetSharedMaterial()
+    {
+        if(objectManager.useSimpleBombMaterial)
+        {
+            if(simpleRuntimeMaterial == null && simpleMaterial != null)
+            {
+                simpleRuntimeMaterial = new Material(simpleMaterial);
+            }
+
+            return simpleRuntimeMaterial;
+        }
+
+        if(complexRuntimeMaterial == null && complexMaterial != null)
+        {
+            complexRuntimeMaterial = new Material(complexMaterial);
+        }
+
+        return complexRuntimeMaterial;
+    }
+
+
+    private void ClearSharedMaterialCache()
+    {
+        if(complexRuntimeMaterial != null) Destroy(complexRuntimeMaterial);
+        if(simpleRuntimeMaterial != null) Destroy(simpleRuntimeMaterial);
+
+        complexRuntimeMaterial = null;
+        simpleRuntimeMaterial = null;
+    }
+
+
+    private void OnDestroy()
+    {
+        ClearSharedMaterialCache();
     }
 }
 

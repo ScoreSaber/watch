@@ -51,8 +51,6 @@ public class ChainManager : MapElementManager<ChainLink>
             return null;
         }
 
-        targetNoteManager.PrepareWarmupMaterialProperties();
-
         ChainLinkHandler chainLinkHandler = chainLinkPool.GetObject();
         chainLinkHandler.transform.SetParent(parent);
         chainLinkHandler.transform.localPosition = localPosition;
@@ -60,9 +58,7 @@ public class ChainManager : MapElementManager<ChainLink>
         chainLinkHandler.transform.localScale = Vector3.one;
         chainLinkHandler.gameObject.SetActive(true);
 
-        chainLinkHandler.SetMaterial(material);
-        chainLinkHandler.SetProperties(targetNoteManager.blueNoteProperties);
-        chainLinkHandler.SetDotProperties(targetNoteManager.blueArrowProperties);
+        targetNoteManager.SetSharedMaterials(chainLinkHandler, false);
         chainLinkHandler.SetOutline(false);
         chainLinkHandler.EnableVisual();
 
@@ -370,18 +366,16 @@ public class ChainManager : MapElementManager<ChainLink>
             visualTransform.SetParent(transform);
             cl.ChainLinkHandler.EnableVisual();
 
-            cl.ChainLinkHandler.SetMaterial(objectManager.useSimpleNoteMaterial ? noteManager.simpleMaterial : noteManager.complexMaterial);
             if(SettingsManager.GetBool("chromaobjectcolors") && cl.CustomColor != null)
             {
                 //This link uses a unique chroma color
+                noteManager.SetCustomMaterials(cl.ChainLinkHandler);
                 cl.ChainLinkHandler.SetProperties(cl.CustomNoteProperties);
                 cl.ChainLinkHandler.SetDotProperties(cl.CustomDotProperties);
             }
             else
             {
-                bool isRed = cl.Color == 0;
-                cl.ChainLinkHandler.SetProperties(isRed ? noteManager.redNoteProperties : noteManager.blueNoteProperties);
-                cl.ChainLinkHandler.SetDotProperties(isRed ? noteManager.redArrowProperties : noteManager.blueArrowProperties);
+                noteManager.SetSharedMaterials(cl.ChainLinkHandler, cl.Color == 0);
             }
 
             float noteSize = Mathf.Clamp(SettingsManager.GetFloat("notesize"), 0.5f, 1f);
