@@ -23,20 +23,32 @@ public class ObjectManager : MonoBehaviour
     [SerializeField] public ArcManager arcManager;
     [SerializeField] public JumpManager jumpManager;
 
-    public bool forceGameAccuracy => ReplayManager.IsReplayMode && SettingsManager.GetBool("accuratereplays");
+    private static readonly string[] cachedSettings = new string[]
+    {
+        "accuratereplays",
+        "simplenotes",
+        "simplebombs",
+        "rotateanimations",
+        "moveanimations",
+        "flipanimations",
+        "lookanimations",
+        "playerheight"
+    };
 
-    public bool useSimpleNoteMaterial => SettingsManager.GetBool("simplenotes");
-    public bool useSimpleBombMaterial => SettingsManager.GetBool("simplebombs");
-    public bool doRotationAnimation => forceGameAccuracy || SettingsManager.GetBool("rotateanimations");
-    public bool doMovementAnimation => forceGameAccuracy || SettingsManager.GetBool("moveanimations");
-    public bool doFlipAnimation => forceGameAccuracy || SettingsManager.GetBool("flipanimations");
+    public bool forceGameAccuracy { get; private set; }
 
-    public bool doLookAnimation => ReplayManager.IsReplayMode && (forceGameAccuracy || SettingsManager.GetBool("lookanimations"));
+    public bool useSimpleNoteMaterial { get; private set; }
+    public bool useSimpleBombMaterial { get; private set; }
+    public bool doRotationAnimation { get; private set; }
+    public bool doMovementAnimation { get; private set; }
+    public bool doFlipAnimation { get; private set; }
+
+    public bool doLookAnimation { get; private set; }
 
     public const float DefaultPlayerHeight = 1.8f;
-    public float PlayerHeightSetting => Mathf.Clamp(SettingsManager.GetFloat("playerheight"), 1.2f, 2.4f);
-    public float playerHeight => ReplayManager.IsReplayMode ? ReplayManager.PlayerHeight : PlayerHeightSetting;
-    public float playerHeightOffset => Mathf.Clamp((playerHeight - DefaultPlayerHeight) / 2, -0.2f, 0.6f);
+    public float PlayerHeightSetting { get; private set; } = 1.2f;
+    public float playerHeight { get; private set; } = 1.2f;
+    public float playerHeightOffset { get; private set; } = -0.2f;
 
     public static readonly Vector2 GridBottomLeft = new Vector2(-0.9f, 0);
     public const float LaneWidth = 0.6f;
@@ -101,6 +113,44 @@ public class ObjectManager : MonoBehaviour
     {
         pos.y += -objectFloorOffset + 0.25f;
         return pos;
+    }
+
+
+    private void UpdateCachedSettings(string setting)
+    {
+        if(setting != "all" && !cachedSettings.Contains(setting))
+        {
+            return;
+        }
+
+        if(SettingsManager.Loaded)
+        {
+            forceGameAccuracy = ReplayManager.IsReplayMode && SettingsManager.GetBool("accuratereplays");
+
+            useSimpleNoteMaterial = SettingsManager.GetBool("simplenotes");
+            useSimpleBombMaterial = SettingsManager.GetBool("simplebombs");
+            doRotationAnimation = forceGameAccuracy || SettingsManager.GetBool("rotateanimations");
+            doMovementAnimation = forceGameAccuracy || SettingsManager.GetBool("moveanimations");
+            doFlipAnimation = forceGameAccuracy || SettingsManager.GetBool("flipanimations");
+
+            doLookAnimation = ReplayManager.IsReplayMode && (forceGameAccuracy || SettingsManager.GetBool("lookanimations"));
+            PlayerHeightSetting = Mathf.Clamp(SettingsManager.GetFloat("playerheight"), 1.2f, 2.4f);
+        }
+
+        UpdatePlayerHeightCache();
+    }
+
+
+    private void UpdateReplayMode(bool replayMode)
+    {
+        UpdateCachedSettings("all");
+    }
+
+
+    private void UpdatePlayerHeightCache()
+    {
+        playerHeight = ReplayManager.IsReplayMode ? ReplayManager.PlayerHeight : PlayerHeightSetting;
+        playerHeightOffset = Mathf.Clamp((playerHeight - DefaultPlayerHeight) / 2, -0.2f, 0.6f);
     }
 
 
@@ -266,6 +316,8 @@ public class ObjectManager : MonoBehaviour
 
     public void UpdateBeat(float currentBeat)
     {
+        UpdatePlayerHeightCache();
+
         noteManager.UpdateVisuals();
         bombManager.UpdateVisuals();
         wallManager.UpdateVisuals();
@@ -879,6 +931,15 @@ public class ObjectManager : MonoBehaviour
     }
 
 
+    private void OnEnable()
+    {
+        SettingsManager.OnSettingsUpdated += UpdateCachedSettings;
+        ReplayManager.OnReplayModeChanged += UpdateReplayMode;
+
+        UpdateCachedSettings("all");
+    }
+
+
     private void Start()
     {
         //Using this event instead of BeatmapManager.OnDifficultyChanged
@@ -895,6 +956,9 @@ public class ObjectManager : MonoBehaviour
 
     private void OnDisable()
     {
+        SettingsManager.OnSettingsUpdated -= UpdateCachedSettings;
+        ReplayManager.OnReplayModeChanged -= UpdateReplayMode;
+
         if(Instance == this)
         {
             Instance = null;

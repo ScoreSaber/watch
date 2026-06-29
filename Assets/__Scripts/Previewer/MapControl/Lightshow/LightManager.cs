@@ -6,9 +6,13 @@ using UnityEngine;
 public class LightManager : MonoBehaviour
 {
     private static bool _staticLights;
+    private static bool staticLightsSetting;
+    private static bool staticLightsWhileScrubbing;
+    private static bool chromaLightColors;
+
     public static bool StaticLights
     {
-        get => _staticLights || Scrubbing || EnvironmentManager.CurrentSceneIndex < 0 || EnvironmentManager.Loading || SettingsManager.GetBool("staticlights", false);
+        get => _staticLights || Scrubbing || EnvironmentManager.CurrentSceneIndex < 0 || EnvironmentManager.Loading || staticLightsSetting;
         set
         {
             _staticLights = value;
@@ -16,7 +20,7 @@ public class LightManager : MonoBehaviour
         }
     }
 
-    private static bool Scrubbing => TimeManager.Scrubbing && SettingsManager.GetBool("staticlightswhilescrubbing", false);
+    private static bool Scrubbing => TimeManager.Scrubbing && staticLightsWhileScrubbing;
 
     private static bool _boostActive;
     public static bool BoostActive
@@ -46,6 +50,7 @@ public class LightManager : MonoBehaviour
     private static readonly string[] lightSettings = new string[]
     {
         "staticlights",
+        "staticlightswhilescrubbing",
         "lightglowbrightness",
         "chromalightcolors",
         "staticbacklasers",
@@ -213,7 +218,7 @@ public class LightManager : MonoBehaviour
     private static Color GetEventBaseColor(LightEvent lightEvent)
     {
         Color baseColor;
-        if(lightEvent.CustomColorIdx != null && SettingsManager.GetBool("chromalightcolors"))
+        if(lightEvent.CustomColorIdx != null && chromaLightColors)
         {
             baseColor = LightColorManager.GetColor(lightEvent.CustomColorIdx);
         }
@@ -380,12 +385,27 @@ public class LightManager : MonoBehaviour
 
     public void UpdateLightParameters()
     {
-        lightGlowBrightness = Mathf.Clamp(SettingsManager.GetFloat("lightglowbrightness"), 0f, 2f);
+        UpdateCachedSettings();
+
         if(StaticLights)
         {
             SetStaticLayout();
         }
         else UpdateLights(TimeManager.CurrentBeat);
+    }
+
+
+    private static void UpdateCachedSettings()
+    {
+        if(!SettingsManager.Loaded)
+        {
+            return;
+        }
+
+        staticLightsSetting = SettingsManager.GetBool("staticlights", false);
+        staticLightsWhileScrubbing = SettingsManager.GetBool("staticlightswhilescrubbing", false);
+        chromaLightColors = SettingsManager.GetBool("chromalightcolors");
+        lightGlowBrightness = Mathf.Clamp(SettingsManager.GetFloat("lightglowbrightness"), 0f, 2f);
     }
 
 

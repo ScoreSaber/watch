@@ -19,11 +19,11 @@ public class LaserDataHandler : MonoBehaviour
     private Vector4[] occlusionDirections;
     private Vector4[] occlusionFalloffInfos;
 
+    private float lightGlowBrightness = 1f;
+
 
     private void UpdateLaserBuffer(bool forceUpdate = false)
     {
-        float brightnessMult = SettingsManager.Loaded ? Mathf.Clamp(SettingsManager.GetFloat("lightglowbrightness"), 0f, 2f) : 1f;
-
         if(laserColors == null || laserColors.Length != MaxLasers)
         {
             //Populate the new array of lasers
@@ -69,7 +69,7 @@ public class LaserDataHandler : MonoBehaviour
 
             Transform lightTransform = lightHandler.transform;
 
-            laserColors[i] = lightHandler.CurrentColor * lightHandler.diffuseMult * brightnessMult;
+            laserColors[i] = lightHandler.CurrentColor * lightHandler.diffuseMult * lightGlowBrightness;
             laserOrigins[i] = lightTransform.position;
             laserDirections[i] = lightTransform.up;
 
@@ -170,10 +170,18 @@ public class LaserDataHandler : MonoBehaviour
     }
 
 
+    private void UpdateLightGlowBrightness()
+    {
+        lightGlowBrightness = SettingsManager.Loaded ? Mathf.Clamp(SettingsManager.GetFloat("lightglowbrightness"), 0f, 2f) : 1f;
+    }
+
+
     private void UpdateSettings(string setting)
     {
         if(setting == "all" || setting == "lightglowbrightness")
         {
+            UpdateLightGlowBrightness();
+
             //Force update the laser buffer to account for change in brightness settings
             UpdateLaserBuffer(true);
         }
@@ -196,6 +204,7 @@ public class LaserDataHandler : MonoBehaviour
     private void OnEnable()
     {
         SettingsManager.OnSettingsUpdated += UpdateSettings;
+        UpdateLightGlowBrightness();
         UpdateBuffers();
     }
 

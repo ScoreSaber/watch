@@ -15,6 +15,9 @@ public class SaberTrailMeshBuilder : MonoBehaviour
     private int[] triangles;
     private int currentSegmentCount = -1;
     private bool meshAssigned;
+    private float trailLifetime;
+    private float trailWidth;
+    private int trailSegmentCount = 10;
 
 
     private void EnsureMeshAssigned()
@@ -77,19 +80,29 @@ public class SaberTrailMeshBuilder : MonoBehaviour
     }
 
 
+    private void UpdateSettings(string setting)
+    {
+        if(!SettingsManager.Loaded || (setting != "all" && setting != "sabertraillength" && setting != "sabertrailwidth" && setting != "sabertrailsegments"))
+        {
+            return;
+        }
+
+        trailLifetime = Mathf.Clamp01(SettingsManager.GetFloat("sabertraillength"));
+        trailWidth = Mathf.Clamp01(SettingsManager.GetFloat("sabertrailwidth"));
+        trailSegmentCount = Mathf.Clamp(SettingsManager.GetInt("sabertrailsegments"), 10, 100);
+    }
+
+
     public void SetFrames(List<ReplayFrame> frames, int startIndex)
     {
-        float lifetime = Mathf.Clamp01(SettingsManager.GetFloat("sabertraillength"));
-        float trailWidth = Mathf.Clamp01(SettingsManager.GetFloat("sabertrailwidth"));
-        int segmentCount = Mathf.Clamp(SettingsManager.GetInt("sabertrailsegments"), 10, 100);
-        float segmentLength = lifetime / segmentCount;
+        float segmentLength = trailLifetime / trailSegmentCount;
 
         EnsureMeshAssigned();
-        bool meshStructureChanged = EnsureBuffers(segmentCount);
+        bool meshStructureChanged = EnsureBuffers(trailSegmentCount);
         Matrix4x4 worldToLocal = transform.worldToLocalMatrix;
 
         int frameIndex = startIndex;
-        for(int i = 0; i < segmentCount; i++)
+        for(int i = 0; i < trailSegmentCount; i++)
         {
             float timeDifference = segmentLength * i;
             float segmentTime = Mathf.Max(TimeManager.CurrentTime - timeDifference, 0f);
@@ -142,6 +155,19 @@ public class SaberTrailMeshBuilder : MonoBehaviour
             mesh.SetUVs(0, uvs);
             mesh.SetTriangles(triangles, 0);
         }
+    }
+
+
+    private void OnEnable()
+    {
+        SettingsManager.OnSettingsUpdated += UpdateSettings;
+        UpdateSettings("all");
+    }
+
+
+    private void OnDisable()
+    {
+        SettingsManager.OnSettingsUpdated -= UpdateSettings;
     }
 
 

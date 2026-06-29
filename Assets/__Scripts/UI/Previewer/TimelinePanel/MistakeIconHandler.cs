@@ -31,6 +31,7 @@ public class MistakeIconHandler : MonoBehaviour
 
     private List<MistakeIcon> icons = new List<MistakeIcon>();
     private Canvas parentCanvas;
+    private bool mistakeIcons;
 
 
     private string GetTimeString(float time)
@@ -110,7 +111,7 @@ public class MistakeIconHandler : MonoBehaviour
             return;
         }
 
-        if(!SettingsManager.GetBool("mistakeicons"))
+        if(!mistakeIcons)
         {
             return;
         }
@@ -169,6 +170,7 @@ public class MistakeIconHandler : MonoBehaviour
     {
         if(setting == "all" || setting == "mistakeicons")
         {
+            mistakeIcons = SettingsManager.Loaded && SettingsManager.GetBool("mistakeicons");
             GenerateIcons();
         }
     }
@@ -188,7 +190,7 @@ public class MistakeIconHandler : MonoBehaviour
         SettingsManager.OnSettingsUpdated += UpdateSettings;
         BeatmapManager.OnBeatmapDifficultyChanged += UpdateDifficulty;
 
-        GenerateIcons();
+        UpdateSettings("all");
     }
 
 

@@ -44,8 +44,9 @@ public class PlayerPositionManager : MonoBehaviour
     };
 
     public static bool UseTricks = true;
-    private bool useTrails => SettingsManager.GetBool("sabertrails");
-    private int trailIndex => Mathf.Clamp(SettingsManager.GetInt("sabertrailtype"), 0, trailTextures.Length - 1);
+    private bool useTrails;
+    private int trailIndex;
+    private float trailBrightness;
 
 
     public static Vector3 PlayerSpaceToWorldSpace(Vector3 pos)
@@ -267,6 +268,14 @@ public class PlayerPositionManager : MonoBehaviour
     }
 
 
+    private void UpdateTrailSettings()
+    {
+        useTrails = SettingsManager.GetBool("sabertrails");
+        trailIndex = Mathf.Clamp(SettingsManager.GetInt("sabertrailtype"), 0, trailTextures.Length - 1);
+        trailBrightness = Mathf.Clamp(SettingsManager.GetFloat("sabertrailbrightness"), 0f, 2f);
+    }
+
+
     public void UpdateTrailMaterials()
     {
         if(!useTrails)
@@ -274,11 +283,10 @@ public class PlayerPositionManager : MonoBehaviour
             return;
         }
 
-        float brightness = Mathf.Clamp(SettingsManager.GetFloat("sabertrailbrightness"), 0f, 2f);
         Texture2D trail = trailTextures[trailIndex];
 
-        leftSaber.SetTrailProperties(NoteManager.LeftSaberColor, brightness, trail);
-        rightSaber.SetTrailProperties(NoteManager.RightSaberColor, brightness, trail);
+        leftSaber.SetTrailProperties(NoteManager.LeftSaberColor, trailBrightness, trail);
+        rightSaber.SetTrailProperties(NoteManager.RightSaberColor, trailBrightness, trail);
     }
 
 
@@ -308,14 +316,23 @@ public class PlayerPositionManager : MonoBehaviour
             return;
         }
 
-        UseTricks = SettingsManager.GetBool("sabertricks");
-
         bool allSettings = setting == "all";
-        if(allSettings || trailMaterialSettings.Contains(setting))
+        bool trailMaterialSetting = allSettings || trailMaterialSettings.Contains(setting);
+        bool redrawSetting = allSettings || redrawSettings.Contains(setting);
+
+        if(trailMaterialSetting || redrawSetting)
+        {
+            UpdateTrailSettings();
+        }
+        if(allSettings || setting == "sabertricks")
+        {
+            UseTricks = SettingsManager.GetBool("sabertricks");
+        }
+        if(trailMaterialSetting)
         {
             UpdateTrailMaterials();
         }
-        if(allSettings || redrawSettings.Contains(setting))
+        if(redrawSetting)
         {
             UpdateBeat(TimeManager.CurrentBeat);
 
