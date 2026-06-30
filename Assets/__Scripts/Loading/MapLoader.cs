@@ -754,21 +754,29 @@ public class MapLoader : MonoBehaviour
             return mapCoverLoadID;
         }
 
-        UIStateManager.CurrentState = UIState.Previewer;
-        
-        BeatmapManager.Info = newMap.Info;
-        SongManager.Instance.MusicClip = newMap.Song;
-
-        CoverImageHandler.Instance.ClearImage();
-        if(newMap.CoverImageData != null && newMap.CoverImageData.Length > 0)
+        ObjectManager.BeginMapSetVisualCoalescing();
+        try
         {
-            StartCoroutine(SetCoverImageFromDataDeferred(newMap.CoverImageData, mapCoverLoadID));
+            UIStateManager.CurrentState = UIState.Previewer;
+
+            BeatmapManager.Info = newMap.Info;
+            SongManager.Instance.MusicClip = newMap.Song;
+
+            CoverImageHandler.Instance.ClearImage();
+            if(newMap.CoverImageData != null && newMap.CoverImageData.Length > 0)
+            {
+                StartCoroutine(SetCoverImageFromDataDeferred(newMap.CoverImageData, mapCoverLoadID));
+            }
+
+            BeatmapManager.SetDifficulties(newMap.Difficulties);
+            BeatmapManager.CurrentDifficulty = BeatmapManager.GetDefaultDifficulty();
+
+            OnMapLoaded?.Invoke();
         }
-
-        BeatmapManager.SetDifficulties(newMap.Difficulties);
-        BeatmapManager.CurrentDifficulty = BeatmapManager.GetDefaultDifficulty();
-
-        OnMapLoaded?.Invoke();
+        finally
+        {
+            ObjectManager.EndMapSetVisualCoalescing();
+        }
 
         return mapCoverLoadID;
     }

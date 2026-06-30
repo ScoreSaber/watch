@@ -1,10 +1,12 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 public class ObjectManager : MonoBehaviour
 {
     private const float SameTimeEpsilon = 0.001f;
+    private const int DeferredLoadWorkFrames = 2;
 
     public static ObjectManager Instance { get; private set; }
 
@@ -108,6 +110,12 @@ public class ObjectManager : MonoBehaviour
 
     public static event Action OnObjectsLoaded;
 
+    private static int visualUpdateCoalescingDepth;
+    private static bool pendingCoalescedVisualUpdate;
+
+    private int mapStatsUpdateRequest;
+    private Coroutine mapStatsUpdateCoroutine;
+
 
     public Vector3 ObjectSpaceToWorldSpace(Vector3 pos)
     {
@@ -151,6 +159,32 @@ public class ObjectManager : MonoBehaviour
     {
         playerHeight = ReplayManager.IsReplayMode ? ReplayManager.PlayerHeight : PlayerHeightSetting;
         playerHeightOffset = Mathf.Clamp((playerHeight - DefaultPlayerHeight) / 2, -0.2f, 0.6f);
+    }
+
+
+    public static void BeginMapSetVisualCoalescing()
+    {
+        visualUpdateCoalescingDepth++;
+    }
+
+
+    public static void EndMapSetVisualCoalescing()
+    {
+        if(visualUpdateCoalescingDepth <= 0)
+        {
+            visualUpdateCoalescingDepth = 0;
+            pendingCoalescedVisualUpdate = false;
+            return;
+        }
+
+        visualUpdateCoalescingDepth--;
+        if(visualUpdateCoalescingDepth > 0 || !pendingCoalescedVisualUpdate)
+        {
+            return;
+        }
+
+        pendingCoalescedVisualUpdate = false;
+        Instance?.UpdateBeat(TimeManager.CurrentBeat);
     }
 
 
@@ -308,8 +342,12 @@ public class ObjectManager : MonoBehaviour
 
         if(UIStateManager.CurrentState == UIState.Previewer)
         {
-            MapStats.UpdateNpsAndSpsValues();
+            ScheduleMapStatsUpdate();
             OnObjectsLoaded?.Invoke();
+        }
+        else
+        {
+            CancelMapStatsUpdate();
         }
     }
 
@@ -318,11 +356,67 @@ public class ObjectManager : MonoBehaviour
     {
         UpdatePlayerHeightCache();
 
+        if(visualUpdateCoalescingDepth > 0)
+        {
+            pendingCoalescedVisualUpdate = true;
+            return;
+        }
+
+        UpdateObjectVisuals();
+    }
+
+
+    private void UpdateObjectVisuals()
+    {
         noteManager.UpdateVisuals();
         bombManager.UpdateVisuals();
         wallManager.UpdateVisuals();
         chainManager.UpdateVisuals();
         arcManager.UpdateVisuals();
+    }
+
+
+    private void ScheduleMapStatsUpdate()
+    {
+        mapStatsUpdateRequest++;
+        if(mapStatsUpdateCoroutine != null)
+        {
+            StopCoroutine(mapStatsUpdateCoroutine);
+        }
+
+        mapStatsUpdateCoroutine = StartCoroutine(UpdateMapStatsDeferred(mapStatsUpdateRequest));
+    }
+
+
+    private void CancelMapStatsUpdate()
+    {
+        mapStatsUpdateRequest++;
+        if(mapStatsUpdateCoroutine != null)
+        {
+            StopCoroutine(mapStatsUpdateCoroutine);
+            mapStatsUpdateCoroutine = null;
+        }
+    }
+
+
+    private IEnumerator UpdateMapStatsDeferred(int request)
+    {
+        for(int i = 0; i < DeferredLoadWorkFrames; i++)
+        {
+            yield return null;
+        }
+
+        if(request != mapStatsUpdateRequest || UIStateManager.CurrentState != UIState.Previewer)
+        {
+            if(request == mapStatsUpdateRequest)
+            {
+                mapStatsUpdateCoroutine = null;
+            }
+            yield break;
+        }
+
+        MapStats.UpdateNpsAndSpsValues();
+        mapStatsUpdateCoroutine = null;
     }
 
 
@@ -963,6 +1057,8 @@ public class ObjectManager : MonoBehaviour
         {
             Instance = null;
         }
+
+        CancelMapStatsUpdate();
     }
 }
 
