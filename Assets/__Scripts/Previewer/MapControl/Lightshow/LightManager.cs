@@ -34,11 +34,13 @@ public class LightManager : MonoBehaviour
 
     public static bool FlipBackLasers { get; private set; }
 
-    public static event Action<LightingPropertyEventArgs> OnLightPropertiesChanged;
     public static event Action<LaserSpeedEvent, LightEventType> OnLaserRotationsChanged;
     public static event Action OnStaticLightsChanged;
 
     public const float FlashIntensity = 1.2f;
+
+    private const int lightPropertyEventTypeCount = 5;
+    private static readonly Action<LightingPropertyEventArgs>[] lightPropertyChangedSubscribers = new Action<LightingPropertyEventArgs>[lightPropertyEventTypeCount];
 
     private static float lightGlowBrightness = 1f;
 
@@ -93,6 +95,61 @@ public class LightManager : MonoBehaviour
     };
 
 
+    public static event Action<LightingPropertyEventArgs> OnLightPropertiesChanged
+    {
+        add
+        {
+            if(value?.Target is LightHandler lightHandler)
+            {
+                SubscribeLightPropertiesChanged(lightHandler.type, value);
+                return;
+            }
+
+            for(int i = 0; i < lightPropertyEventTypeCount; i++)
+            {
+                lightPropertyChangedSubscribers[i] += value;
+            }
+        }
+        remove
+        {
+            if(value?.Target is LightHandler lightHandler)
+            {
+                UnsubscribeLightPropertiesChanged(lightHandler.type, value);
+                return;
+            }
+
+            for(int i = 0; i < lightPropertyEventTypeCount; i++)
+            {
+                lightPropertyChangedSubscribers[i] -= value;
+            }
+        }
+    }
+
+
+    public static void SubscribeLightPropertiesChanged(LightEventType type, Action<LightingPropertyEventArgs> subscriber)
+    {
+        int index = (int)type;
+        if(index < 0 || index >= lightPropertyEventTypeCount)
+        {
+            return;
+        }
+
+        lightPropertyChangedSubscribers[index] += subscriber;
+    }
+
+
+    public static void UnsubscribeLightPropertiesChanged(LightEventType type, Action<LightingPropertyEventArgs> subscriber)
+    {
+        int index = (int)type;
+        if(index < 0 || index >= lightPropertyEventTypeCount)
+        {
+            return;
+        }
+
+        lightPropertyChangedSubscribers[index] -= subscriber;
+    }
+
+
     public void UpdateLights(float beat)
     {
         if(StaticLights)
@@ -144,7 +201,7 @@ public class LightManager : MonoBehaviour
         eventArgs.eventColor = eventColor;
         eventArgs.laserColor = GetLaserColor(eventColor);
         eventArgs.glowColor = GetLaserGlowColor(eventColor);
-        OnLightPropertiesChanged?.Invoke(eventArgs);
+        lightPropertyChangedSubscribers[(int)type]?.Invoke(eventArgs);
     }
 
 
