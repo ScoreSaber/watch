@@ -33,6 +33,7 @@ public class MistakeIconHandler : MonoBehaviour
     [SerializeField] private string failTooltip;
 
     private List<MistakeIcon> icons = new List<MistakeIcon>();
+    private readonly List<MistakeIcon> iconPool = new List<MistakeIcon>();
     private Canvas parentCanvas;
     private bool mistakeIcons;
     private int iconGenerationRequest;
@@ -107,6 +108,28 @@ public class MistakeIconHandler : MonoBehaviour
     }
 
 
+    private MistakeIcon CreateIcon()
+    {
+        MistakeIcon newIcon;
+        if(iconPool.Count > 0)
+        {
+            int lastIconIndex = iconPool.Count - 1;
+            newIcon = iconPool[lastIconIndex];
+            iconPool.RemoveAt(lastIconIndex);
+            newIcon.transform.SetParent(iconParent, false);
+            newIcon.transform.SetAsLastSibling();
+            newIcon.gameObject.SetActive(true);
+        }
+        else
+        {
+            newIcon = Instantiate(iconPrefab, iconParent, false);
+        }
+
+        icons.Add(newIcon);
+        return newIcon;
+    }
+
+
     private void GenerateIcons()
     {
         ClearIcons();
@@ -130,26 +153,23 @@ public class MistakeIconHandler : MonoBehaviour
                 continue;
             }
 
-            MistakeIcon newIcon = Instantiate(iconPrefab, iconParent, false);
+            MistakeIcon newIcon = CreateIcon();
 
             SetIconProperties(ref newIcon, scoringEvent);
-            icons.Add(newIcon);
         }
 
         foreach(Pause pauseEvent in ReplayManager.CurrentReplay.pauses)
         {
-            MistakeIcon newIcon = Instantiate(iconPrefab, iconParent, false);
+            MistakeIcon newIcon = CreateIcon();
 
             SetPauseIconProperties(ref newIcon, pauseEvent);
-            icons.Add(newIcon);
         }
 
         if(ReplayManager.Failed)
         {
-            MistakeIcon newIcon = Instantiate(iconPrefab, iconParent, false);
+            MistakeIcon newIcon = CreateIcon();
 
             SetFailIconProperties(ref newIcon, ReplayManager.FailTime);
-            icons.Add(newIcon);
         }
     }
 
@@ -196,12 +216,13 @@ public class MistakeIconHandler : MonoBehaviour
 
     private void ClearIcons()
     {
-        for(int i = icons.Count - 1; i >= 0; i--)
+        for(int i = 0; i < icons.Count; i++)
         {
-            icons[i].gameObject.SetActive(false);
-            Destroy(icons[i].gameObject);
-            icons.Remove(icons[i]);
+            MistakeIcon icon = icons[i];
+            icon.gameObject.SetActive(false);
+            iconPool.Add(icon);
         }
+        icons.Clear();
     }
 
 
