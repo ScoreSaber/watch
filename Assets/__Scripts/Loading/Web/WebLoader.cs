@@ -98,6 +98,22 @@ public class WebLoader
     }
 
 
+    public static float GetProgress()
+    {
+        if(ActiveRequests.Count == 0)
+        {
+            return 1f;
+        }
+
+        float progress = 0f;
+        foreach(UnityWebRequest request in ActiveRequests)
+        {
+            progress += request.downloadProgress;
+        }
+        return progress / ActiveRequests.Count;
+    }
+
+
     public static async Task<MemoryStream> StreamFromURL(string url, bool noProxy, bool sendError = true)
     {
         MapLoader.Progress = 0;
@@ -136,7 +152,7 @@ public class WebLoader
                     DownloadSize = ulong.TryParse(sizeHeader, out outValue) ? outValue : 0;
                 }
 
-                MapLoader.Progress = request.downloadProgress;
+                MapLoader.Progress = GetProgress();
 
                 await Task.Yield();
             }
@@ -179,7 +195,6 @@ public class WebLoader
                 request.Dispose();
                 uwr = ActiveRequests.Count > 0 ? ActiveRequests[^1] : null;
             }
-            MapLoader.Progress = 0;
         }
         
         return null;

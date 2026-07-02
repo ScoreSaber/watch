@@ -109,7 +109,6 @@ public class EnvironmentManager : MonoBehaviour
     [SerializeField] private EnvironmentLightParameters[] EnvironmentParameters;
 
     private const int defaultSceneIndex = 1;
-    private const string fallbackEnvironment = "BigMirrorEnvironment";
 
     private int targetSceneIndex = -1;
 
@@ -178,15 +177,9 @@ public class EnvironmentManager : MonoBehaviour
         int sceneIndex = SceneUtility.GetBuildIndexByScenePath(environmentName);
         if(sceneIndex < 0)
         {
-            Debug.Log($"Found no scene match for {environmentName}, using fallback.");
-            environmentName = fallbackEnvironment;
-            sceneIndex = SceneUtility.GetBuildIndexByScenePath(environmentName);
-
-            if(sceneIndex < 0)
-            {
-                Debug.LogWarning($"Found no scene match for fallback {environmentName}, using default scene.");
-                sceneIndex = defaultSceneIndex;
-            }
+            Debug.Log($"Found no scene match for {environmentName}, using default.");
+            sceneIndex = defaultSceneIndex;
+            environmentName = supportedEnvironments[0];
         }
 
         if(sceneIndex == targetSceneIndex && sceneIndex == CurrentSceneIndex)
@@ -196,7 +189,16 @@ public class EnvironmentManager : MonoBehaviour
         }
 
         targetSceneIndex = sceneIndex;
-        CurrentEnvironmentParameters = GetEnvironmentParameters(environmentName);
+        try
+        {
+            CurrentEnvironmentParameters = EnvironmentParameters.First(x => x.EnvironmentName == environmentName);
+        }
+        catch(InvalidOperationException)
+        {
+            //Missing parameters for this environment
+            Debug.LogWarning($"Missing environment parameters for {environmentName}!");
+            CurrentEnvironmentParameters = new EnvironmentLightParameters();
+        }
 
         if(!Loading)
         {
@@ -216,24 +218,17 @@ public class EnvironmentManager : MonoBehaviour
             environmentName = duplicateEnvironments[environmentName];
         }
 
-        DefaultEnvironmentParameters = GetEnvironmentParameters(environmentName);
-
-        SetEnvironment(environmentName);
-    }
-
-
-    private EnvironmentLightParameters GetEnvironmentParameters(string environmentName)
-    {
-        EnvironmentLightParameters parameters = EnvironmentParameters?.FirstOrDefault(x => x.EnvironmentName == environmentName);
-        if(parameters != null)
+        try
         {
-            return parameters;
+            DefaultEnvironmentParameters = EnvironmentParameters.First(x => x.EnvironmentName == environmentName);
+        }
+        catch(InvalidOperationException)
+        {
+            //Missing parameters for this environment
+            DefaultEnvironmentParameters = new EnvironmentLightParameters();
         }
 
-        Debug.LogWarning($"Missing environment parameters for {environmentName}!");
-        return EnvironmentParameters?.FirstOrDefault(x => x.EnvironmentName == fallbackEnvironment)
-            ?? EnvironmentParameters?.FirstOrDefault(x => x.EnvironmentName == supportedEnvironments[0])
-            ?? new EnvironmentLightParameters();
+        SetEnvironment(environmentName);
     }
 
 

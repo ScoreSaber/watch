@@ -843,7 +843,7 @@ public class MapLoader : MonoBehaviour
         if(!string.IsNullOrEmpty(cachedFile?.FilePath))
         {
             Debug.Log("Found replay in cache.");
-            UrlArgHandler.LoadedReplayID = id;
+            UrlArgHandler.LoadedBLReplayID = id;
             StartCoroutine(LoadReplayDirectoryCoroutine(cachedFile.FilePath, cachedFile.ExtraData));
             yield break;
         }
@@ -880,7 +880,7 @@ public class MapLoader : MonoBehaviour
         {
             UrlArgHandler.LoadedSSScoreId = id;
         }
-        else UrlArgHandler.LoadedReplayID = id;
+        else UrlArgHandler.LoadedBLReplayID = id;
 
         if(resolved.SourceInfo != null)
         {
@@ -1109,7 +1109,7 @@ public class MapLoader : MonoBehaviour
         if(!ReplayManager.IsReplayMode)
         {
             HotReloader.loadedMapPath = null;
-            UrlArgHandler.LoadedReplayID = null;
+            UrlArgHandler.LoadedBLReplayID = null;
         }
         UrlArgHandler.ignoreMapForSharing = false;
 
@@ -1193,7 +1193,7 @@ public class MapLoader : MonoBehaviour
                 if(!string.IsNullOrEmpty(scoreID) && scoreID.All(char.IsDigit))
                 {
                     StartCoroutine(LoadReplayIDCoroutine(scoreID));
-                    UrlArgHandler.LoadedReplayID = scoreID;
+                    UrlArgHandler.LoadedBLReplayID = scoreID;
                     return;
                 }
             }
@@ -1204,7 +1204,7 @@ public class MapLoader : MonoBehaviour
                 if(!string.IsNullOrEmpty(scoreID) && scoreID.All(char.IsDigit))
                 {
                     StartCoroutine(LoadReplayIDCoroutine(scoreID));
-                    UrlArgHandler.LoadedReplayID = scoreID;
+                    UrlArgHandler.LoadedBLReplayID = scoreID;
                     return;
                 }
             }

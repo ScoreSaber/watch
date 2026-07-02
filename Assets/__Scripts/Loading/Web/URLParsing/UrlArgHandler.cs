@@ -42,14 +42,14 @@ public class UrlArgHandler : MonoBehaviour
         }
     }
 
-    private static string _loadedReplayID;
-    public static string LoadedReplayID
+    private static string _loadedBLReplayID;
+    public static string LoadedBLReplayID
     {
-        get => _loadedReplayID;
+        get => _loadedBLReplayID;
 
         set
         {
-            _loadedReplayID = value;
+            _loadedBLReplayID = value;
             _loadedReplayURL = null;
             _loadedSSScoreId = null;
         }
@@ -63,7 +63,7 @@ public class UrlArgHandler : MonoBehaviour
         set
         {
             _loadedReplayURL = value;
-            _loadedReplayID = null;
+            _loadedBLReplayID = null;
             _loadedSSScoreId = null;
         }
     }
@@ -76,7 +76,7 @@ public class UrlArgHandler : MonoBehaviour
         set
         {
             _loadedSSScoreId = value;
-            _loadedReplayID = null;
+            _loadedBLReplayID = null;
             _loadedReplayURL = null;
         }
     }
@@ -130,7 +130,6 @@ public class UrlArgHandler : MonoBehaviour
             case "replayURL":
                 replayURL = value;
                 break;
-            case "scoreId":
             case "ssScoreId":
             case "ssScoreID":
                 ssScoreId = value;
@@ -197,7 +196,7 @@ public class UrlArgHandler : MonoBehaviour
         else if(!string.IsNullOrEmpty(replayID))
         {
             StartCoroutine(mapLoader.LoadReplayIDCoroutine(replayID, mapURL, mapID, noProxy));
-            LoadedReplayID = replayID;
+            LoadedBLReplayID = replayID;
 
             //Don't set the diff cause that depends on the replay
             setTime = true;
@@ -246,7 +245,7 @@ public class UrlArgHandler : MonoBehaviour
 
         if(autoPlay)
         {
-            MapLoader.OnMapLoaded += StartPlaying;
+            BeatmapManager.OnBeatmapDifficultyChanged += StartPlaying;
         }
 
         //Only apply start time and diff when a map is also included in the arguments
@@ -342,18 +341,9 @@ public class UrlArgHandler : MonoBehaviour
     }
 
 
-    private void StartPlaying()
+    private void StartPlaying(Difficulty difficulty)
     {
-        MapLoader.OnMapLoaded -= StartPlaying;
-        StartCoroutine(StartPlayingDelayed());
-    }
-
-
-    private System.Collections.IEnumerator StartPlayingDelayed()
-    {
-        //Wait for map initialization to settle before starting playback
-        yield return null;
-        yield return null;
+        BeatmapManager.OnBeatmapDifficultyChanged -= StartPlaying;
         TimeManager.SetPlaying(true);
     }
 
@@ -418,7 +408,7 @@ public class UrlArgHandler : MonoBehaviour
 
     public void ClearSubscriptions()
     {
-        MapLoader.OnMapLoaded -= StartPlaying;
+        BeatmapManager.OnBeatmapDifficultyChanged -= StartPlaying;
         MapLoader.OnMapLoaded -= SetTime;
         MapLoader.OnMapLoaded -= SetDifficulty;
     }

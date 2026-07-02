@@ -9,7 +9,7 @@ using TMPro;
 
 public class MapDirectoryInput : MonoBehaviour
 {
-    private const string ScoreSaberHost = "scoresaber.com";
+    private const string ScoreSaberHost = "watch.scoresaber.com";
 
     [SerializeField] private MapLoader mapLoader;
     [SerializeField] private UrlArgHandler urlArgHandler;

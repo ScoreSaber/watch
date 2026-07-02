@@ -28,9 +28,9 @@ public class SharePanel : MonoBehaviour
             {
                 newText += $"?ssScoreId={UrlArgHandler.LoadedSSScoreId}";
             }
-            else if(!string.IsNullOrEmpty(UrlArgHandler.LoadedReplayID))
+            else if(!string.IsNullOrEmpty(UrlArgHandler.LoadedBLReplayID))
             {
-                newText += $"?scoreID={UrlArgHandler.LoadedReplayID}";
+                newText += $"?scoreID={UrlArgHandler.LoadedBLReplayID}";
             }
             else if(!string.IsNullOrEmpty(UrlArgHandler.LoadedReplayURL))
             {

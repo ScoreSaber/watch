@@ -55,6 +55,7 @@ public class ScoringEvent : MapElement
     {
         Initialized = false;
 
+        // ScoreSaber-specific logic. This should probably get a clearer definition later
         if(noteEvent.lineIndex >= 0)
         {
             int st = noteEvent.noteScoringType;
@@ -70,6 +71,7 @@ public class ScoringEvent : MapElement
         }
         else
         {
+            // BSOR V1 logic
             ID = noteEvent.noteID;
         }
 
