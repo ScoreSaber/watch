@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
 
-public class AsyncReplayDecoder
+public class AsyncBsorDecoder
 {
     public Replay replay = new Replay();
 
@@ -380,8 +380,19 @@ public class AsyncReplayDecoder
     }
 }
 
-public static class ReplayDecoder
+public static class BsorDecoder
 {
+    private const int MagicNumber = 0x442d3d69;
+
+    public static bool IsBsorV1Replay(byte[] buffer)
+    {
+        int pointer = 0;
+        int magic = DecodeInt(buffer, ref pointer);
+        byte version = buffer[pointer++];
+
+        return magic == MagicNumber && version == 1;
+    }
+
     public static Replay Decode(byte[] buffer)
     {
         int arrayLength = (int)buffer.Length;
@@ -391,7 +402,7 @@ public static class ReplayDecoder
         int magic = DecodeInt(buffer, ref pointer);
         byte version = buffer[pointer++];
 
-        if(magic == 0x442d3d69 && version == 1)
+        if(magic == MagicNumber && version == 1)
         {
             Replay replay = new Replay();
 
@@ -436,7 +447,7 @@ public static class ReplayDecoder
         }
     }
 
-    private static ReplayInfo DecodeInfo(byte[] buffer, ref int pointer)
+    public static ReplayInfo DecodeInfo(byte[] buffer, ref int pointer)
     {
         ReplayInfo result = new ReplayInfo();
 
@@ -472,7 +483,7 @@ public static class ReplayDecoder
         return result;
     }
 
-    private static List<Frame> DecodeFrames(byte[] buffer, ref int pointer)
+    public static List<Frame> DecodeFrames(byte[] buffer, ref int pointer)
     {
         int length = DecodeInt(buffer, ref pointer);
         List<Frame> result = new List<Frame>();
@@ -487,7 +498,7 @@ public static class ReplayDecoder
         return result;
     }
 
-    private static Frame DecodeFrame(byte[] buffer, ref int pointer)
+    public static Frame DecodeFrame(byte[] buffer, ref int pointer)
     {
         Frame result = new Frame();
         result.time = DecodeFloat(buffer, ref pointer);
@@ -499,7 +510,7 @@ public static class ReplayDecoder
         return result;
     }
 
-    private static List<NoteEvent> DecodeNotes(byte[] buffer, ref int pointer)
+    public static List<NoteEvent> DecodeNotes(byte[] buffer, ref int pointer)
     {
         int length = DecodeInt(buffer, ref pointer);
         List<NoteEvent> result = new List<NoteEvent>();
@@ -510,7 +521,7 @@ public static class ReplayDecoder
         return result;
     }
 
-    private static List<WallEvent> DecodeWalls(byte[] buffer, ref int pointer)
+    public static List<WallEvent> DecodeWalls(byte[] buffer, ref int pointer)
     {
         int length = DecodeInt(buffer, ref pointer);
         List<WallEvent> result = new List<WallEvent>();
@@ -526,7 +537,7 @@ public static class ReplayDecoder
         return result;
     }
 
-    private static List<AutomaticHeight> DecodeHeight(byte[] buffer, ref int pointer)
+    public static List<AutomaticHeight> DecodeHeight(byte[] buffer, ref int pointer)
     {
         int length = DecodeInt(buffer, ref pointer);
         List<AutomaticHeight> result = new List<AutomaticHeight>();
@@ -540,7 +551,7 @@ public static class ReplayDecoder
         return result;
     }
 
-    private static List<Pause> DecodePauses(byte[] buffer, ref int pointer)
+    public static List<Pause> DecodePauses(byte[] buffer, ref int pointer)
     {
         int length = DecodeInt(buffer, ref pointer);
         List<Pause> result = new List<Pause>();
@@ -554,7 +565,7 @@ public static class ReplayDecoder
         return result;
     }
 
-    private static SaberOffsets DecodeSaberOffsets(byte[] buffer, ref int pointer)
+    public static SaberOffsets DecodeSaberOffsets(byte[] buffer, ref int pointer)
     {
         SaberOffsets result = new SaberOffsets();
         result.LeftSaberLocalPosition = DecodeVector3(buffer, ref pointer);
@@ -564,7 +575,7 @@ public static class ReplayDecoder
         return result;
     }
 
-    private static Dictionary<string, byte[]> DecodeCustomData(byte[] buffer, ref int pointer)
+    public static Dictionary<string, byte[]> DecodeCustomData(byte[] buffer, ref int pointer)
     {
         Dictionary<string, byte[]> result = new Dictionary<string, byte[]>();
         int count = DecodeInt(buffer, ref pointer);
