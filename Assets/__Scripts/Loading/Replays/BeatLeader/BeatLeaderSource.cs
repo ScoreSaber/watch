@@ -1,15 +1,16 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Web;
 using UnityEngine;
 
 public class BeatLeaderSource : ReplaySource
 {
-    private const string BeatLeaderBaseURL = "https://beatleader.com/";
-
     public override ReplaySourceType SourceType => ReplaySourceType.BeatLeader;
     public override string Name => "BeatLeader";
     public override string[] InputPrefixes => new[] { "bl:", "beatleader:" };
-    public override bool CachesReplaysByScoreID => true;
+    public override string BaseURL => "https://beatleader.com/";
+    public override string ApiURL => "https://api.beatleader.com/";
 
 
     public override ReplaySourceInfo CreateInfo()
@@ -20,6 +21,50 @@ public class BeatLeaderSource : ReplaySource
         };
         info.LoadSourceData = replay => LoadSourceDataAsync(info, replay);
         return info;
+    }
+
+
+    public override bool TryConvertLink(string url, out string convertedQuery)
+    {
+        convertedQuery = null;
+        if(!url.StartsWith(UrlArgHandler.BeatLeaderViewerURL) && !url.StartsWith(UrlArgHandler.OldBeatLeaderViewerURL))
+        {
+            return false;
+        }
+
+        //Convert BeatLeader viewer arguments to their ArcViewer equivalents
+        List<KeyValuePair<string, string>> parameters = UrlUtility.ParseUrlParams(HttpUtility.UrlDecode(url));
+        List<string> convertedArgs = new List<string>();
+        foreach(KeyValuePair<string, string> pair in parameters)
+        {
+            string value = pair.Value;
+            switch(pair.Key)
+            {
+                case "scoreId":
+                    convertedArgs.Add(CombineArgument("scoreID", value));
+                    break;
+                case "link":
+                    convertedArgs.Add(CombineArgument("replayURL", value));
+                    break;
+                case "mapLink":
+                    convertedArgs.Add(CombineArgument("url", value));
+                    break;
+                case "time":
+                    if(int.TryParse(value, out int result))
+                    {
+                        //BL stores timestamps in ms, while ArcViewer uses seconds
+                        value = ((float)result / 1000).ToString();
+                        convertedArgs.Add(CombineArgument("t", value));
+                    }
+                    break;
+            }
+        }
+
+        if(convertedArgs.Count > 0)
+        {
+            convertedQuery = string.Join('&', convertedArgs);
+        }
+        return true;
     }
 
 
@@ -112,7 +157,7 @@ public class BeatLeaderSource : ReplaySource
 
         if(!string.IsNullOrEmpty(user.id))
         {
-            source.PlayerProfileURL = $"{BeatLeaderBaseURL}u/{user.id}";
+            source.PlayerProfileURL = $"{ReplaySources.BeatLeader.BaseURL}u/{user.id}";
         }
 
         if(user.profileSettings != null
@@ -133,7 +178,7 @@ public class BeatLeaderSource : ReplaySource
     {
         if(!string.IsNullOrEmpty(leaderboardID))
         {
-            source.LeaderboardURL = $"{BeatLeaderBaseURL}leaderboard/global/{leaderboardID}";
+            source.LeaderboardURL = $"{ReplaySources.BeatLeader.BaseURL}leaderboard/global/{leaderboardID}";
         }
     }
 }

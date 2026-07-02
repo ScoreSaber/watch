@@ -79,7 +79,7 @@ public class MapLinkButtons : MonoBehaviour
     private void UpdateShareButton()
     {
         bool enable = ReplayManager.IsReplayMode
-            ? !string.IsNullOrEmpty(UrlArgHandler.LoadedReplayID) || !string.IsNullOrEmpty(UrlArgHandler.LoadedReplayURL)
+            ? !string.IsNullOrEmpty(UrlArgHandler.LoadedBLScoreId) || !string.IsNullOrEmpty(UrlArgHandler.LoadedReplayURL)
             : !string.IsNullOrEmpty(UrlArgHandler.LoadedMapID) || !string.IsNullOrEmpty(UrlArgHandler.LoadedMapURL);
         shareButton.SetActive(enable);
     }

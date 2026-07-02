@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -12,8 +13,14 @@ public abstract class ReplaySource
     //Score ID prefixes accepted in the map input field (i.e. "bl:12345")
     public abstract string[] InputPrefixes { get; }
 
-    //Whether replays from this source should be cached using their score ID
-    public virtual bool CachesReplaysByScoreID => false;
+    //Website root for this source, used for building profile/leaderboard links
+    public abstract string BaseURL { get; }
+
+    //API root used for this source's score lookups
+    public abstract string ApiURL { get; }
+
+    //URLs from this source that should bypass the CORS proxy
+    public virtual string[] CorsURLs => new[] { BaseURL, ApiURL };
 
     //Whether the given website host belongs to this source
     public virtual bool MatchesHost(string host) => false;
@@ -23,6 +30,35 @@ public abstract class ReplaySource
 
     //Resolves a score ID into replay/map download info through the source API
     public abstract Task<ResolvedScore> ResolveScoreAsync(string scoreID, string mapURL, string mapID, bool showErrors = true);
+
+    //Tries to convert a link from this source's website into equivalent ArcViewer share arguments
+    //Returns true when the link belongs to this source; convertedQuery is null when the link is invalid
+    public virtual bool TryConvertLink(string url, out string convertedQuery)
+    {
+        convertedQuery = null;
+        return false;
+    }
+
+
+    protected static string CombineArgument(string name, string value)
+    {
+        return string.Join('=', name, value);
+    }
+
+
+    protected static string GetQueryValue(List<KeyValuePair<string, string>> parameters, params string[] names)
+    {
+        foreach(string name in names)
+        {
+            KeyValuePair<string, string> match = parameters.FirstOrDefault(x => x.Key == name);
+            if(!string.IsNullOrEmpty(match.Value))
+            {
+                return match.Value;
+            }
+        }
+
+        return null;
+    }
 }
 
 

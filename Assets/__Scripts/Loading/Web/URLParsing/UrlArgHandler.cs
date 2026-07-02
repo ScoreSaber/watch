@@ -42,14 +42,14 @@ public class UrlArgHandler : MonoBehaviour
         }
     }
 
-    private static string _loadedReplayID;
-    public static string LoadedReplayID
+    private static string _loadedBLScoreId;
+    public static string LoadedBLScoreId
     {
-        get => _loadedReplayID;
+        get => _loadedBLScoreId;
 
         set
         {
-            _loadedReplayID = value;
+            _loadedBLScoreId = value;
             _loadedReplayURL = null;
         }
     }
@@ -62,7 +62,7 @@ public class UrlArgHandler : MonoBehaviour
         set
         {
             _loadedReplayURL = value;
-            _loadedReplayID = null;
+            _loadedBLScoreId = null;
         }
     }
 
@@ -167,7 +167,7 @@ public class UrlArgHandler : MonoBehaviour
         if(!string.IsNullOrEmpty(replayID))
         {
             mapLoader.LoadReplayFromScore(ReplaySources.BeatLeader, replayID, mapURL, mapID, noProxy);
-            LoadedReplayID = replayID;
+            LoadedBLScoreId = replayID;
 
             //Don't set the diff cause that depends on the replay
             setTime = true;
@@ -216,7 +216,7 @@ public class UrlArgHandler : MonoBehaviour
 
         if(autoPlay)
         {
-            MapLoader.OnMapLoaded += StartPlaying;
+            BeatmapManager.OnBeatmapDifficultyChanged += StartPlaying;
         }
 
         //Only apply start time and diff when a map is also included in the arguments
@@ -312,19 +312,10 @@ public class UrlArgHandler : MonoBehaviour
     }
 
 
-    private void StartPlaying()
+    private void StartPlaying(Difficulty difficulty)
     {
-        MapLoader.OnMapLoaded -= StartPlaying;
-        StartCoroutine(StartPlayingDelayed());
-    }
-
-
-    private System.Collections.IEnumerator StartPlayingDelayed()
-    {
-        //Wait for map initialization to settle before starting playback
-        yield return null;
-        yield return null;
         TimeManager.SetPlaying(true);
+        BeatmapManager.OnBeatmapDifficultyChanged -= StartPlaying;
     }
 
 
@@ -387,7 +378,7 @@ public class UrlArgHandler : MonoBehaviour
 
     public void ClearSubscriptions()
     {
-        MapLoader.OnMapLoaded -= StartPlaying;
+        BeatmapManager.OnBeatmapDifficultyChanged -= StartPlaying;
         MapLoader.OnMapLoaded -= SetTime;
         MapLoader.OnMapLoaded -= SetDifficulty;
     }

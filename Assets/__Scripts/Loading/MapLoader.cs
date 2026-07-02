@@ -198,8 +198,8 @@ public class MapLoader : MonoBehaviour
 
     //Loads a map from the given prepared map task, produced by MapDownloader
     //When applySharingInfo is set, sharing parameters get updated to match the loaded map
-    //promptOnFail shows the manual map selection instead of outright failing, for replay flows
-    private async Task LoadPreparedMapAsync(Task<PreparedMapLoad> mapTask, bool applySharingInfo, bool promptOnFail, CancellationToken token)
+    //Returns false when no map could be prepared, so callers can fall back or fail their own way
+    private async Task<bool> TryLoadPreparedMapAsync(Task<PreparedMapLoad> mapTask, bool applySharingInfo, CancellationToken token)
     {
         LoadingMessage = "Downloading map";
 
@@ -215,17 +215,12 @@ public class MapLoader : MonoBehaviour
 
         if(token.IsCancellationRequested)
         {
-            return;
+            return true;
         }
 
         if(preparedMap == null || (string.IsNullOrEmpty(preparedMap.CachedPath) && preparedMap.Stream == null))
         {
-            if(promptOnFail)
-            {
-                ShowReplayMapPrompt();
-            }
-            else SetMap(LoadedMap.Empty);
-            return;
+            return false;
         }
 
         if(applySharingInfo)
@@ -245,7 +240,7 @@ public class MapLoader : MonoBehaviour
         {
             Debug.Log("Found map in cache.");
             await LoadMapZipAsync(preparedMap.CachedPath, token);
-            return;
+            return true;
         }
 
         if(preparedMap.Stream.CanSeek)
@@ -266,24 +261,31 @@ public class MapLoader : MonoBehaviour
             Debug.LogWarning($"Unhandled exception loading prepared map: {err.Message}, {err.StackTrace}");
 
             SetMap(LoadedMap.Empty);
-            return;
+            return true;
         }
 
         await LoadMapDataAsync(zipReader, token);
+        return true;
     }
 
 
     public async void LoadMapURL(string url, string mapID = null, string mapHash = null, bool noProxy = false)
     {
         CancellationToken token = BeginLoading();
-        await LoadPreparedMapAsync(MapDownloader.PrepareMapURLAsync(url, mapID, mapHash, noProxy, false), false, false, token);
+        if(!await TryLoadPreparedMapAsync(MapDownloader.PrepareMapURLAsync(url, mapID, mapHash, noProxy, false), false, token))
+        {
+            SetMap(LoadedMap.Empty);
+        }
     }
 
 
     public async void LoadMapID(string mapID, string mapHash = null)
     {
         CancellationToken token = BeginLoading("Fetching map from BeatSaver");
-        await LoadPreparedMapAsync(MapDownloader.PrepareMapIDAsync(mapID, mapHash, false), false, false, token);
+        if(!await TryLoadPreparedMapAsync(MapDownloader.PrepareMapIDAsync(mapID, mapHash, false), false, token))
+        {
+            SetMap(LoadedMap.Empty);
+        }
     }
 
 
@@ -307,7 +309,10 @@ public class MapLoader : MonoBehaviour
         Debug.Log($"Searching for map matching replay hash: {mapHash}");
         LoadingMessage = "Fetching map from BeatSaver";
 
-        await LoadPreparedMapAsync(MapDownloader.PrepareMapHashAsync(mapHash, noProxy), true, true, token);
+        if(!await TryLoadPreparedMapAsync(MapDownloader.PrepareMapHashAsync(mapHash, noProxy), true, token))
+        {
+            ShowReplayMapPrompt();
+        }
     }
 
 
@@ -340,8 +345,13 @@ public class MapLoader : MonoBehaviour
         Task sourceDataTask = LoadSourceDataAsync(sourceInfo, replay);
         if(mapTask != null)
         {
-            await LoadPreparedMapAsync(mapTask, true, true, token);
-            return;
+            if(await TryLoadPreparedMapAsync(mapTask, true, token))
+            {
+                return;
+            }
+
+            //The source couldn't provide a map preemptively, fall back to the usual search below
+            Debug.Log("No prepared map from the replay source! Searching from replay info instead.");
         }
 
         string mapHash = replay.info.hash;
@@ -355,13 +365,19 @@ public class MapLoader : MonoBehaviour
             Debug.Log($"Loading map from preset ID: {mapID}");
             UrlArgHandler.LoadedMapID = mapID;
             LoadingMessage = "Fetching map from BeatSaver";
-            await LoadPreparedMapAsync(MapDownloader.PrepareMapIDAsync(mapID, mapHash, noProxy), false, false, token);
+            if(!await TryLoadPreparedMapAsync(MapDownloader.PrepareMapIDAsync(mapID, mapHash, noProxy), false, token))
+            {
+                SetMap(LoadedMap.Empty);
+            }
         }
         else if(!string.IsNullOrEmpty(mapURL))
         {
             Debug.Log($"Loading map from preset URL: {mapURL}");
             UrlArgHandler.LoadedMapURL = mapURL;
-            await LoadPreparedMapAsync(MapDownloader.PrepareMapURLAsync(mapURL, mapID, mapHash, noProxy, false), false, false, token);
+            if(!await TryLoadPreparedMapAsync(MapDownloader.PrepareMapURLAsync(mapURL, mapID, mapHash, noProxy, false), false, token))
+            {
+                SetMap(LoadedMap.Empty);
+            }
         }
         else if(string.IsNullOrEmpty(replay.info?.hash) || replay.info.hash.Length < 40)
         {
@@ -391,9 +407,12 @@ public class MapLoader : MonoBehaviour
                 }
                 else UrlArgHandler.LoadedMapURL = sourceInfo.FallbackMapDownloadURL;
 
-                await LoadPreparedMapAsync(
-                    MapDownloader.PrepareMapURLAsync(sourceInfo.FallbackMapDownloadURL, sourceInfo.FallbackMapID, mapHash, noProxy, false),
-                    false, false, token);
+                Task<PreparedMapLoad> fallbackTask = MapDownloader.PrepareMapURLAsync(
+                    sourceInfo.FallbackMapDownloadURL, sourceInfo.FallbackMapID, mapHash, noProxy, false);
+                if(!await TryLoadPreparedMapAsync(fallbackTask, false, token))
+                {
+                    SetMap(LoadedMap.Empty);
+                }
             }
             else await LoadMapFromReplayAsync(replay, noProxy, token);
         }
@@ -505,6 +524,7 @@ public class MapLoader : MonoBehaviour
             return;
         }
 
+        ResetPendingReplay();
         _ = LoadReplayDirectoryWebGLAsync(directory, BeginLoading());
         UrlArgHandler.LoadedReplayURL = null;
     }
@@ -568,8 +588,20 @@ public class MapLoader : MonoBehaviour
     }
 
 
+    //Clears any replay that's still waiting on the manual map prompt,
+    //so a new replay load doesn't mix states with the pending one
+    private static void ResetPendingReplay()
+    {
+        if(ReplayManager.IsReplayMode)
+        {
+            ReplayManager.Reset();
+        }
+    }
+
+
     public async void LoadReplayURL(string url, string id = null, string mapURL = null, string mapID = null, bool noProxy = false)
     {
+        ResetPendingReplay();
         CancellationToken token = BeginLoading();
         await LoadReplayURLAsync(url, id, mapURL, mapID, noProxy, null, token);
     }
@@ -577,19 +609,17 @@ public class MapLoader : MonoBehaviour
 
     public async void LoadReplayFromScore(ReplaySource source, string id, string mapURL = null, string mapID = null, bool noProxy = false)
     {
+        ResetPendingReplay();
         CancellationToken token = BeginLoading();
         Debug.Log($"Searching for replay from {source.Name} score ID: {id}");
 
 #if !UNITY_WEBGL || UNITY_EDITOR
-        if(source.CachesReplaysByScoreID)
+        CachedFile cachedFile = CacheManager.GetCachedReplay(null, id);
+        if(!string.IsNullOrEmpty(cachedFile?.FilePath))
         {
-            CachedFile cachedFile = CacheManager.GetCachedReplay(null, id);
-            if(!string.IsNullOrEmpty(cachedFile?.FilePath))
-            {
-                Debug.Log("Found replay in cache.");
-                await LoadReplayDirectoryAsync(cachedFile.FilePath, cachedFile.ExtraData, token);
-                return;
-            }
+            Debug.Log("Found replay in cache.");
+            await LoadReplayDirectoryAsync(cachedFile.FilePath, cachedFile.ExtraData, token);
+            return;
         }
 #endif
 
@@ -622,7 +652,7 @@ public class MapLoader : MonoBehaviour
             ReplayManager.SourceInfo = resolved.SourceInfo;
         }
 
-        string replayID = source.CachesReplaysByScoreID ? id : null;
+        string replayID = id;
         Task<PreparedMapLoad> mapTask = MapDownloader.PrepareMapLoadAsync(resolved, noProxy);
         await LoadReplayURLAsync(resolved.ReplayURL, replayID, resolved.MapURL, resolved.MapID, noProxy, mapTask, token);
     }
@@ -630,6 +660,7 @@ public class MapLoader : MonoBehaviour
 
     public async void LoadReplayScoreAuto(string id, string mapURL = null, string mapID = null, bool noProxy = false)
     {
+        ResetPendingReplay();
         CancellationToken token = BeginLoading();
         Debug.Log($"Searching for replay from score ID: {id}");
 
@@ -638,7 +669,7 @@ public class MapLoader : MonoBehaviour
         if(!string.IsNullOrEmpty(cachedFile?.FilePath))
         {
             Debug.Log("Found replay in cache.");
-            UrlArgHandler.LoadedReplayID = id;
+            UrlArgHandler.LoadedBLScoreId = id;
             await LoadReplayDirectoryAsync(cachedFile.FilePath, cachedFile.ExtraData, token);
             return;
         }
@@ -680,14 +711,14 @@ public class MapLoader : MonoBehaviour
             return;
         }
 
-        UrlArgHandler.LoadedReplayID = id;
+        UrlArgHandler.LoadedBLScoreId = id;
 
         if(resolved.SourceInfo != null)
         {
             ReplayManager.SourceInfo = resolved.SourceInfo;
         }
 
-        string replayID = source.CachesReplaysByScoreID ? id : null;
+        string replayID = id;
         Task<PreparedMapLoad> mapTask = MapDownloader.PrepareMapLoadAsync(resolved, noProxy);
         await LoadReplayURLAsync(resolved.ReplayURL, replayID, resolved.MapURL, resolved.MapID, noProxy, mapTask, token);
     }
@@ -705,6 +736,8 @@ public class MapLoader : MonoBehaviour
 
     public void StartBsorV1StreamURI(Uri baseUrl)
     {
+        ResetPendingReplay();
+
         // We need to replace the url with the proper websocket connection
         string[] args = baseUrl.Query.TrimStart('?').Split('&');
 
@@ -797,6 +830,7 @@ public class MapLoader : MonoBehaviour
 
             if(directory.EndsWith(".bsor", StringComparison.InvariantCultureIgnoreCase))
             {
+                ResetPendingReplay();
                 _ = LoadReplayDirectoryAsync(directory, null, BeginLoading());
                 return;
             }
@@ -848,7 +882,7 @@ public class MapLoader : MonoBehaviour
         if(!ReplayManager.IsReplayMode)
         {
             HotReloader.loadedMapPath = null;
-            UrlArgHandler.LoadedReplayID = null;
+            UrlArgHandler.LoadedBLScoreId = null;
         }
         UrlArgHandler.ignoreMapForSharing = false;
 
@@ -875,20 +909,17 @@ public class MapLoader : MonoBehaviour
                 return;
             }
 
-            if(!ReplayManager.IsReplayMode)
+            if(noQuery.EndsWith(".bsor", StringComparison.InvariantCultureIgnoreCase))
             {
-                if(noQuery.EndsWith(".bsor", StringComparison.InvariantCultureIgnoreCase))
-                {
-                    LoadReplayURL(decodedURL);
-                    UrlArgHandler.LoadedReplayURL = decodedURL;
-                    return;
-                }
+                LoadReplayURL(decodedURL);
+                UrlArgHandler.LoadedReplayURL = decodedURL;
+                return;
+            }
 
-                if(noQuery.Contains("stream.beatleader.com", StringComparison.InvariantCultureIgnoreCase))
-                {
-                    StartBsorV1StreamURI(uri);
-                    return;
-                }
+            if(noQuery.Contains("stream.beatleader.com", StringComparison.InvariantCultureIgnoreCase))
+            {
+                StartBsorV1StreamURI(uri);
+                return;
             }
 
             Debug.LogWarning($"{decodedURL} doesn't link to a valid map!");
@@ -896,16 +927,19 @@ public class MapLoader : MonoBehaviour
             return;
         }
 
+        if(SettingsManager.GetBool("replaymode")
+            && ReplaySources.TryParsePrefixedScoreID(input, out ReplaySource source, out string scoreID))
+        {
+            //Prefixed score IDs are unambiguous, so they always load a new replay,
+            //even when another replay is waiting on the map prompt
+            LoadReplayFromScore(source, scoreID);
+
+            UrlArgHandler.LoadedBLScoreId = scoreID;
+            return;
+        }
+
         if(!ReplayManager.IsReplayMode && SettingsManager.GetBool("replaymode"))
         {
-            if(ReplaySources.TryParsePrefixedScoreID(input, out ReplaySource source, out string scoreID))
-            {
-                LoadReplayFromScore(source, scoreID);
-
-                UrlArgHandler.LoadedReplayID = scoreID;
-                return;
-            }
-
             if(!input.Any(x => !char.IsDigit(x)))
             {
                 LoadReplayScoreAuto(input);
