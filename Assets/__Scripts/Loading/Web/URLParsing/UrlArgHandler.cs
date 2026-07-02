@@ -166,7 +166,7 @@ public class UrlArgHandler : MonoBehaviour
 
         if(!string.IsNullOrEmpty(replayID))
         {
-            StartCoroutine(mapLoader.LoadReplayIDCoroutine(replayID, mapURL, mapID, noProxy));
+            mapLoader.LoadReplayFromScore(ReplaySources.BeatLeader, replayID, mapURL, mapID, noProxy);
             LoadedReplayID = replayID;
 
             //Don't set the diff cause that depends on the replay
@@ -174,14 +174,14 @@ public class UrlArgHandler : MonoBehaviour
         }
         else if(!string.IsNullOrEmpty(replayURL))
         {
-            StartCoroutine(mapLoader.LoadReplayURLCoroutine(replayURL, null, mapURL, mapID, noProxy));
+            mapLoader.LoadReplayURL(replayURL, null, mapURL, mapID, noProxy);
             LoadedReplayURL = replayURL;
 
             setTime = true;
         }
         else if(!string.IsNullOrEmpty(mapID))
         {
-            StartCoroutine(mapLoader.LoadMapIDCoroutine(mapID));
+            mapLoader.LoadMapID(mapID);
             LoadedMapID = mapID;
 
             setTime = true;
@@ -189,7 +189,7 @@ public class UrlArgHandler : MonoBehaviour
         }
         else if(!string.IsNullOrEmpty(mapURL))
         {
-            StartCoroutine(mapLoader.LoadMapZipURLCoroutine(mapURL, null, null, noProxy));
+            mapLoader.LoadMapURL(mapURL, noProxy: noProxy);
             LoadedMapURL = mapURL;
 
             setTime = true;
@@ -216,7 +216,7 @@ public class UrlArgHandler : MonoBehaviour
 
         if(autoPlay)
         {
-            BeatmapManager.OnBeatmapDifficultyChanged += StartPlaying;
+            MapLoader.OnMapLoaded += StartPlaying;
         }
 
         //Only apply start time and diff when a map is also included in the arguments
@@ -312,10 +312,19 @@ public class UrlArgHandler : MonoBehaviour
     }
 
 
-    private void StartPlaying(Difficulty difficulty)
+    private void StartPlaying()
     {
+        MapLoader.OnMapLoaded -= StartPlaying;
+        StartCoroutine(StartPlayingDelayed());
+    }
+
+
+    private System.Collections.IEnumerator StartPlayingDelayed()
+    {
+        //Wait for map initialization to settle before starting playback
+        yield return null;
+        yield return null;
         TimeManager.SetPlaying(true);
-        BeatmapManager.OnBeatmapDifficultyChanged -= StartPlaying;
     }
 
 
@@ -378,7 +387,7 @@ public class UrlArgHandler : MonoBehaviour
 
     public void ClearSubscriptions()
     {
-        BeatmapManager.OnBeatmapDifficultyChanged -= StartPlaying;
+        MapLoader.OnMapLoaded -= StartPlaying;
         MapLoader.OnMapLoaded -= SetTime;
         MapLoader.OnMapLoaded -= SetDifficulty;
     }
