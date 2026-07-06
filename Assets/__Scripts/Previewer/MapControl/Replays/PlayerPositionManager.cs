@@ -62,7 +62,9 @@ public class PlayerPositionManager : MonoBehaviour
             return Vector3.zero;
         }
 
-        int lastFrameIndex = ReplayFrames.GetLastIndexUnoptimized(x => x.Time <= time);
+        //Callers pass ascending times during map load, so the cursor in GetLastIndex
+        //avoids rescanning every frame from the start for each lookup
+        int lastFrameIndex = ReplayFrames.GetLastIndex(time, x => x.Time <= time);
         if(lastFrameIndex < 0)
         {
             //Always start with the first frame

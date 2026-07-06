@@ -558,7 +558,15 @@ public class ObjectManager : MonoBehaviour
                     //scoringType*10000 + lineIndex*1000 + noteLineLayer*100 + colorType*10 + cutDirection
                     if(newNote.IsChainHead)
                     {
-                        if(hasTail)
+                        if(hasHead && hasTail)
+                        {
+                            newNote.ScoringType = ScoringType.ChainHeadArcHeadArcTail;
+                        }
+                        else if(hasHead)
+                        {
+                            newNote.ScoringType = ScoringType.ChainHeadArcHead;
+                        }
+                        else if(hasTail)
                         {
                             newNote.ScoringType = ScoringType.ChainHeadArcTail;
                         }
@@ -581,13 +589,7 @@ public class ObjectManager : MonoBehaviour
                     int noteID = ((int)newNote.ScoringType * 10000) + (n.x * 1000) + (n.y * 100) + (n.c * 10) + n.d;
                     newNote.ScoreEventID = noteID;
 
-                    ScoringEvent matchingEvent = scoringEventsOnBeat.Find(x => x.ID == noteID);
-
-                    if(matchingEvent == null)
-                    {
-                        //Unable to match the note with its "correct" ID, try brute forcing all scoring types
-                        matchingEvent = ScoringEvent.MatchNote(scoringEventsOnBeat, newNote.ScoringType, noteID);
-                    }
+                    ScoringEvent matchingEvent = ScoringEvent.MatchNote(scoringEventsOnBeat, newNote.ScoringType, noteID);
 
                     if(matchingEvent == null || matchingEvent.noteEventType == NoteEventType.miss)
                     {

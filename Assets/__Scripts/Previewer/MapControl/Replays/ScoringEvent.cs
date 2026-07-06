@@ -55,7 +55,9 @@ public class ScoringEvent : MapElement
     {
         Initialized = false;
 
-        // ScoreSaber-specific logic. This should probably get a clearer definition later
+        //A set lineIndex means this is a ScoreSaber-style note event,
+        //which doesn't encode a noteID, so an equivalent ID is rebuilt from the note data
+        //(ported from the ScoreSaber pc-mod to match its note matching behavior)
         if(noteEvent.lineIndex >= 0)
         {
             int st = noteEvent.noteScoringType;
@@ -71,7 +73,6 @@ public class ScoringEvent : MapElement
         }
         else
         {
-            // BSOR V1 logic
             ID = noteEvent.noteID;
         }
 
@@ -213,8 +214,6 @@ public class ScoringEvent : MapElement
 
     public static ScoringEvent MatchNote(List<ScoringEvent> scoringEvents, ScoringType scoringType, int noteID)
     {
-        ScoringType originalType = scoringType;
-
         int noTypeID = noteID - (int)scoringType * 10000;
 
         foreach(ScoringType replayScoringType in CompatibleReplayScoringTypes(scoringType))
@@ -237,43 +236,60 @@ public class ScoringEvent : MapElement
     }
 
 
+    //Replays keep scoring type values from the game version that recorded them,
+    //so any type sharing a note part can match (ported from the scoresaber pc-mod)
     private static IEnumerable<ScoringType> CompatibleReplayScoringTypes(ScoringType scoringType)
     {
-        // same aliases as the scoresaber pc mod
+        yield return scoringType;
+
+        int parts = GetNoteParts(scoringType);
+        if(parts == 0)
+        {
+            yield break;
+        }
+
+        foreach(ScoringType other in PartScoringTypes)
+        {
+            if(other != scoringType && (GetNoteParts(other) & parts) != 0)
+            {
+                yield return other;
+            }
+        }
+    }
+
+
+    private const int ArcHeadPart = 1;
+    private const int ArcTailPart = 2;
+    private const int ChainHeadPart = 4;
+    private const int ChainLinkPart = 8;
+
+    private static readonly ScoringType[] PartScoringTypes =
+    {
+        ScoringType.ArcHead,
+        ScoringType.ArcTail,
+        ScoringType.ChainHead,
+        ScoringType.ChainLink,
+        ScoringType.ArcHeadArcTail,
+        ScoringType.ChainHeadArcTail,
+        ScoringType.ChainLinkArcHead,
+        ScoringType.ChainHeadArcHead,
+        ScoringType.ChainHeadArcHeadArcTail
+    };
+
+    private static int GetNoteParts(ScoringType scoringType)
+    {
         switch(scoringType)
         {
-            case ScoringType.ArcHeadArcTail:
-                yield return ScoringType.ArcHeadArcTail;
-                yield return ScoringType.ArcHead;
-                yield return ScoringType.ArcTail;
-                break;
-
-            case ScoringType.ChainHeadArcHead:
-                yield return ScoringType.ChainHeadArcHead;
-                yield return ScoringType.ArcHead;
-                break;
-
-            case ScoringType.ChainHeadArcTail:
-                yield return ScoringType.ChainHeadArcTail;
-                yield return ScoringType.ChainHead;
-                yield return ScoringType.ArcTail;
-                break;
-
-            case ScoringType.ChainHeadArcHeadArcTail:
-                yield return ScoringType.ChainHeadArcHeadArcTail;
-                yield return ScoringType.ChainHeadArcTail;
-                yield return ScoringType.ArcHead;
-                break;
-
-            case ScoringType.ChainLinkArcHead:
-                yield return ScoringType.ChainLinkArcHead;
-                yield return ScoringType.ChainLink;
-                yield return ScoringType.ArcHead;
-                break;
-
-            default:
-                yield return scoringType;
-                break;
+            case ScoringType.ArcHead: return ArcHeadPart;
+            case ScoringType.ArcTail: return ArcTailPart;
+            case ScoringType.ChainHead: return ChainHeadPart;
+            case ScoringType.ChainLink: return ChainLinkPart;
+            case ScoringType.ArcHeadArcTail: return ArcHeadPart | ArcTailPart;
+            case ScoringType.ChainHeadArcTail: return ChainHeadPart | ArcTailPart;
+            case ScoringType.ChainLinkArcHead: return ChainLinkPart | ArcHeadPart;
+            case ScoringType.ChainHeadArcHead: return ChainHeadPart | ArcHeadPart;
+            case ScoringType.ChainHeadArcHeadArcTail: return ChainHeadPart | ArcHeadPart | ArcTailPart;
+            default: return 0;
         }
     }
 }
