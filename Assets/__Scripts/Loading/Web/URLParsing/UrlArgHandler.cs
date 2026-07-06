@@ -7,10 +7,16 @@ using UnityEngine;
 
 public class UrlArgHandler : MonoBehaviour
 {
-    public const string ArcViewerName = "ArcViewer";
-    public const string ArcViewerURL = "https://allpoland.github.io/ArcViewer/";
+    public const string ArcViewerName = "ScoreSaber Replay";
+    private const string DefaultArcViewerURL = "https://scoresaber.com/";
+    private const string ArcViewerURLEnv = "ARCVIEWER_BASE_URL";
     public const string OldBeatLeaderViewerURL = "https://replay.beatleader.xyz/";
     public const string BeatLeaderViewerURL = "https://replay.beatleader.com/";
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+    [DllImport("__Internal")]
+    private static extern string GetArcViewerEnv(string name);
+#endif
 
     [DllImport("__Internal")]
     public static extern string GetParameters();
@@ -107,6 +113,34 @@ public class UrlArgHandler : MonoBehaviour
     private static string settingsOverride;
 
     [SerializeField] private MapLoader mapLoader;
+
+    public static string ArcViewerURL => GetArcViewerURL();
+
+
+    public static bool IsArcViewerURL(string url)
+    {
+        return !string.IsNullOrEmpty(url)
+            && (url.StartsWith(ArcViewerURL, StringComparison.InvariantCultureIgnoreCase)
+                || url.StartsWith(DefaultArcViewerURL, StringComparison.InvariantCultureIgnoreCase));
+    }
+
+
+    private static string GetArcViewerURL()
+    {
+        string url = null;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        url = GetArcViewerEnv(ArcViewerURLEnv);
+#else
+        url = Environment.GetEnvironmentVariable(ArcViewerURLEnv);
+#endif
+
+        if(string.IsNullOrWhiteSpace(url))
+        {
+            url = DefaultArcViewerURL;
+        }
+
+        return url.EndsWith("/") ? url : $"{url}/";
+    }
 
 
     private void ParseParameter(string name, string value)

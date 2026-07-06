@@ -936,7 +936,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 9087878821805838510, guid: a7f0a55a68792b5458628d0091c80d18, type: 3}
       propertyPath: m_text
-      value: Player Colors
+      value: Use Player Colors
       objectReference: {fileID: 0}
     - target: {fileID: 9087878822117837788, guid: a7f0a55a68792b5458628d0091c80d18, type: 3}
       propertyPath: m_Pivot.x
@@ -1059,7 +1059,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 50a1bb069cc015242a8fd646a471379c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Text: Enables saber colors set by<br>BeatLeader patrons in their replays
+  Text: Use player colors from replays
 --- !u!224 &42022507 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 9087878822117837788, guid: a7f0a55a68792b5458628d0091c80d18, type: 3}
@@ -4609,6 +4609,7 @@ RectTransform:
   - {fileID: 1925287637}
   - {fileID: 108349961}
   - {fileID: 1734555179}
+  - {fileID: 2139000002}
   m_Father: {fileID: 653087963}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -8950,39 +8951,6 @@ MonoBehaviour:
     postSwingJudgements: []
     timeDependencyJudgements: []
     chainLinkColor: {r: 1, g: 1, b: 1, a: 1}
-  - formatMode: 1
-    timeDependencyDecimals: 0
-    timeDependencyMult: 0
-    scoreJudgements:
-    - color: {r: 1, g: 1, b: 1, a: 1}
-      scoreThreshold: 115
-      text: '%s'
-      fade: 0
-    - color: {r: 0.6, g: 0, b: 1, a: 1}
-      scoreThreshold: 113
-      text: '%s'
-      fade: 0
-    - color: {r: 0, g: 0.5019608, b: 1, a: 1}
-      scoreThreshold: 110
-      text: '%s'
-      fade: 0
-    - color: {r: 0, g: 1, b: 0, a: 1}
-      scoreThreshold: 105
-      text: '%s'
-      fade: 0
-    - color: {r: 1, g: 1, b: 0, a: 1}
-      scoreThreshold: 100
-      text: '%s'
-      fade: 0
-    - color: {r: 1, g: 0, b: 0, a: 1}
-      scoreThreshold: 0
-      text: '%s'
-      fade: 0
-    preSwingJudgements: []
-    accJudgements: []
-    postSwingJudgements: []
-    timeDependencyJudgements: []
-    chainLinkColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &272283317
 GameObject:
   m_ObjectHideFlags: 0
@@ -12054,7 +12022,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 2709129354868922554, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
       propertyPath: url
-      value: https://github.com/AllPoland/ArcViewer/releases/latest
+      value: https://github.com/ScoreSaber/watch/releases/latest
       objectReference: {fileID: 0}
     - target: {fileID: 7938308403783786213, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
       propertyPath: m_Name
@@ -25928,7 +25896,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5241766548580045618, guid: 1917af5300baa7a4a8080f2e09dfc773, type: 3}
       propertyPath: ValueNames.Array.size
-      value: 4
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 5241766548580045618, guid: 1917af5300baa7a4a8080f2e09dfc773, type: 3}
       propertyPath: 'ValueNames.Array.data[0]'
@@ -25941,14 +25909,6 @@ PrefabInstance:
     - target: {fileID: 5241766548580045618, guid: 1917af5300baa7a4a8080f2e09dfc773, type: 3}
       propertyPath: 'ValueNames.Array.data[2]'
       value: Acc
-      objectReference: {fileID: 0}
-    - target: {fileID: 5241766548580045618, guid: 1917af5300baa7a4a8080f2e09dfc773, type: 3}
-      propertyPath: 'ValueNames.Array.data[3]'
-      value: BeatLeader
-      objectReference: {fileID: 0}
-    - target: {fileID: 5241766548580045618, guid: 1917af5300baa7a4a8080f2e09dfc773, type: 3}
-      propertyPath: 'ValueNames.Array.data[4]'
-      value: Hitsound 2
       objectReference: {fileID: 0}
     - target: {fileID: 5241766548580045628, guid: 1917af5300baa7a4a8080f2e09dfc773, type: 3}
       propertyPath: m_Pivot.x
@@ -26092,8 +26052,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   Text: 'Picks between hit score color presets<br>None - all score indicators are
     white<br>Simple - a few colors spanning wide score ranges<br>Acc - a few colors
-    compressed the 100-115 range<br>BeatLeader - acc focused colors inspired by BL''s
-    replay viewer<br>[Only affects replays]'
+    compressed the 100-115 range<br>[Only affects replays]'
 --- !u!114 &778217436
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -47480,7 +47439,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: ArcViewer - v0.1.0
+  m_text: ArcViewer 0.7.7+ss.5
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 78be5821565fc5848a05da897476c0d3, type: 2}
   m_sharedMaterial: {fileID: -8419783504037868241, guid: 78be5821565fc5848a05da897476c0d3, type: 2}
@@ -47572,7 +47531,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2bc97b35a71bb5441bc9b8b84fe3dd32, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  prefixText: ArcViewer - v
+  prefixText: 'ArcViewer '
+  suffixText: +ss.5
 --- !u!114 &1491974456
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -48616,7 +48576,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: ArcViewer<br><size=60%>Version 0.1.0
+  m_text: ArcViewer 0.7.7+ss.5
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 78be5821565fc5848a05da897476c0d3, type: 2}
   m_sharedMaterial: {fileID: -8419783504037868241, guid: 78be5821565fc5848a05da897476c0d3, type: 2}
@@ -48708,7 +48668,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2bc97b35a71bb5441bc9b8b84fe3dd32, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  prefixText: 'ArcViewer<br><size=60%>Version '
+  prefixText: 'ArcViewer '
+  suffixText: +ss.5
 --- !u!1001 &1509348771
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -55002,6 +54963,126 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
   m_PrefabInstance: {fileID: 1734555178}
   m_PrefabAsset: {fileID: 0}
+--- !u!1001 &2139000001
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 124442758}
+    m_Modifications:
+    - target: {fileID: 2709129354868922554, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: url
+      value: https://github.com/umbranoxio
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786213, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_Name
+      value: Umbranox
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_Pivot.x
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_Pivot.y
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_RootOrder
+      value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_AnchorMin.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_AnchorMin.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_SizeDelta.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_SizeDelta.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 440
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: -57.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7938308403783786215, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_Sprite
+      value:
+      objectReference: {fileID: 21300000, guid: b4813be2cd7e4a35a900de6194794dc4, type: 3}
+    - target: {fileID: 7938308405161201762, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+      propertyPath: m_text
+      value: 'Umbranox
+
+        <size=80%>Contributor'
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+--- !u!224 &2139000002 stripped
+RectTransform:
+  m_CorrespondingSourceObject: {fileID: 7938308403783786214, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
+  m_PrefabInstance: {fileID: 2139000001}
+  m_PrefabAsset: {fileID: 0}
 --- !u!224 &1734880833 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 5136436448866786555, guid: 0b8e475dbbe2bc54993fad86c1556db3, type: 3}
@@ -60373,7 +60454,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 2709129354868922554, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
       propertyPath: url
-      value: https://github.com/AllPoland/ArcViewer/releases/latest
+      value: https://github.com/ScoreSaber/watch/releases/latest
       objectReference: {fileID: 0}
     - target: {fileID: 7938308403783786213, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
       propertyPath: m_Name
@@ -61263,7 +61344,7 @@ PrefabInstance:
       objectReference: {fileID: 21300000, guid: 8c9a231e354c41d40aade732e5f9133a, type: 3}
     - target: {fileID: 7938308405161201762, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
       propertyPath: m_text
-      value: Support me
+      value: Support the creator of ArcViewer
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -70120,7 +70201,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 2709129354868922554, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
       propertyPath: url
-      value: https://github.com/AllPoland/ArcViewer
+      value: https://github.com/ScoreSaber/watch
       objectReference: {fileID: 0}
     - target: {fileID: 7938308403783786213, guid: e8725b00dbd79884080167d5cdc4c9c9, type: 3}
       propertyPath: m_Name

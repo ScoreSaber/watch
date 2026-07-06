@@ -9,8 +9,6 @@ using TMPro;
 
 public class MapDirectoryInput : MonoBehaviour
 {
-    private const string ScoreSaberHost = "watch.scoresaber.com";
-
     [SerializeField] private MapLoader mapLoader;
     [SerializeField] private UrlArgHandler urlArgHandler;
     [SerializeField] private TMP_InputField directoryField;
@@ -126,7 +124,7 @@ public class MapDirectoryInput : MonoBehaviour
         {
             host = host[4..];
         }
-        if(!host.Equals(ScoreSaberHost, System.StringComparison.InvariantCultureIgnoreCase))
+        if(!ReplaySources.ScoreSaber.MatchesHost(host))
         {
             return false;
         }
@@ -182,7 +180,7 @@ public class MapDirectoryInput : MonoBehaviour
             return;
         }
 
-        if(MapDirectory.StartsWith(UrlArgHandler.ArcViewerURL))
+        if(UrlArgHandler.IsArcViewerURL(MapDirectory))
         {
             //Input a shared link
             urlArgHandler.LoadMapFromShareableURL(MapDirectory);

@@ -28,7 +28,7 @@ public class MapLinkButtons : MonoBehaviour
         }
 
         string mapURL = string.Concat(beatSaverURL, mapDirect, UrlArgHandler.LoadedMapID);
-        Application.OpenURL(mapURL);
+        ExternalLinkOpener.Open(mapURL);
     }
 
 
@@ -42,7 +42,7 @@ public class MapLinkButtons : MonoBehaviour
             return;
         }
 
-        Application.OpenURL(UrlArgHandler.LoadedMapURL);
+        ExternalLinkOpener.Open(UrlArgHandler.LoadedMapURL);
     }
 
 
@@ -57,7 +57,7 @@ public class MapLinkButtons : MonoBehaviour
             return;
         }
 
-        Application.OpenURL(source.LeaderboardURL);
+        ExternalLinkOpener.Open(source.LeaderboardURL);
     }
 
 

@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Assets.__Scripts.Loading.Replays.PP;
 using Assets.__Scripts.Loading.Replays.ScoreSaber.Utils;
@@ -6,14 +7,23 @@ using UnityEngine;
 
 public class ScoreSaberSource : ReplaySource
 {
+    private const string BaseURLEnv = "ARCVIEWER_SCORESABER_BASE_URL";
+    private const string ApiURLEnv = "ARCVIEWER_SCORESABER_API_URL";
+    private const string DefaultBaseURL = "https://scoresaber.com/";
+
     public static ScoreSaberPPHandler PPHandler { get; private set; }
 
     public override ReplaySourceType SourceType => ReplaySourceType.ScoreSaber;
     public override string Name => "ScoreSaber";
     public override string[] InputPrefixes => new[] { "ss:", "scoresaber:" };
-    public override string BaseURL => "https://scoresaber.com/";
-    public override string ApiURL => "https://scoresaber.com/api/v2/";
+    public override string BaseURL => GetURL(BaseURLEnv, DefaultBaseURL);
+    public override string ApiURL => GetURL(ApiURLEnv, GetPathURL(BaseURL, "api/v2/"));
     public override string[] CorsURLs => new[] { BaseURL, ApiURL, "https://watch.scoresaber.com", "https://cdn.scoresaber.com" };
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+    [DllImport("__Internal")]
+    private static extern string GetArcViewerEnv(string name);
+#endif
 
 
     public override bool MatchesHost(string host)
@@ -26,6 +36,30 @@ public class ScoreSaberSource : ReplaySource
     public override ReplaySourceInfo CreateInfo()
     {
         return CreateInfo(null);
+    }
+
+
+    private static string GetURL(string envName, string defaultURL)
+    {
+        string url = null;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        url = GetArcViewerEnv(envName);
+#else
+        url = Environment.GetEnvironmentVariable(envName);
+#endif
+
+        if(string.IsNullOrWhiteSpace(url))
+        {
+            url = defaultURL;
+        }
+
+        return url.EndsWith("/") ? url : $"{url}/";
+    }
+
+
+    private static string GetPathURL(string baseURL, string path)
+    {
+        return new Uri(new Uri(baseURL), path).ToString();
     }
 
 
