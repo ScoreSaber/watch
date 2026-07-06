@@ -6,47 +6,6 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
 
-public static class ApiConfig
-{
-    private const string DefaultBeatLeaderBaseURL = "https://beatleader.com/";
-    private const string DefaultScoreSaberBaseURL = "https://scoresaber.com/";
-
-    public static readonly string BeatLeaderBaseURL = GetURL(DefaultBeatLeaderBaseURL);
-    public static readonly string ScoreSaberBaseURL = GetURL(DefaultScoreSaberBaseURL);
-    public static readonly string BeatLeaderApiURL = GetSubdomainURL(BeatLeaderBaseURL, "api");
-    public static readonly string ScoreSaberApiURL = GetPathURL(ScoreSaberBaseURL, "api/v2/");
-
-    public static readonly string[] CorsURLs =
-    {
-        BeatLeaderBaseURL,
-        BeatLeaderApiURL,
-        ScoreSaberBaseURL,
-        ScoreSaberApiURL
-    };
-
-    private static string GetURL(string defaultURL)
-    {
-        return defaultURL.EndsWith("/") ? defaultURL : $"{defaultURL}/";
-    }
-
-    private static string GetSubdomainURL(string baseURL, string subdomain)
-    {
-        Uri uri = new Uri(baseURL);
-        UriBuilder builder = new UriBuilder(uri)
-        {
-            Host = $"{subdomain}.{uri.Host}",
-            Path = ""
-        };
-
-        return builder.Uri.ToString();
-    }
-
-    private static string GetPathURL(string baseURL, string path)
-    {
-        return new Uri(new Uri(baseURL), path).ToString();
-    }
-}
-
 #pragma warning disable CS4014 //Suppress warnings about lack of await for uwr.SendWebRequest()
 public class WebLoader
 {
@@ -63,13 +22,10 @@ public class WebLoader
         "https://api.beatleader.com",
         "https://cdn.replays.beatleader.com/",
         "https://cdn.songs.beatleader.xyz/",
-        "https://cdn.songs.beatleader.com/",
-        "https://scoresaber.com",
-        "https://cdn.scoresaber.com"
+        "https://cdn.songs.beatleader.com/"
     };
 
     public static string[] WhitelistURLs => DefaultWhitelistURLs
-        .Concat(ApiConfig.CorsURLs)
         .Concat(ReplaySources.All.SelectMany(x => x.CorsURLs))
         .Where(x => !string.IsNullOrEmpty(x))
         .Distinct()

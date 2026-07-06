@@ -20,9 +20,7 @@ public static class MapDownloader
 {
     public static Task<PreparedMapLoad> PrepareMapLoadAsync(ResolvedScore resolved, bool noProxy)
     {
-        if(resolved == null) return Task.FromResult<PreparedMapLoad>(null);
-
-        string mapHash = GetSourceMapHash(resolved.SourceInfo);
+        string mapHash = resolved.SourceInfo?.MapHash;
         if(!string.IsNullOrEmpty(resolved.MapURL))
         {
             return PrepareMapURLAsync(resolved.MapURL, resolved.MapID, mapHash, noProxy, false);
@@ -172,15 +170,4 @@ public static class MapDownloader
         };
     }
 
-
-    public static string GetSourceMapHash(ReplaySourceInfo sourceInfo)
-    {
-        string mapHash = sourceInfo?.MapHash;
-        if(!string.IsNullOrEmpty(mapHash) && mapHash.Length > 40)
-        {
-            mapHash = mapHash[..40];
-        }
-
-        return mapHash;
-    }
 }

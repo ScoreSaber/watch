@@ -7,8 +7,8 @@ public class ScoreSaberSource : ReplaySource
     public override ReplaySourceType SourceType => ReplaySourceType.ScoreSaber;
     public override string Name => "ScoreSaber";
     public override string[] InputPrefixes => new[] { "ss:", "scoresaber:" };
-    public override string BaseURL => ApiConfig.ScoreSaberBaseURL;
-    public override string ApiURL => ApiConfig.ScoreSaberApiURL;
+    public override string BaseURL => "https://scoresaber.com/";
+    public override string ApiURL => "https://scoresaber.com/api/v2/";
     public override string[] CorsURLs => new[] { BaseURL, ApiURL, "https://watch.scoresaber.com", "https://cdn.scoresaber.com" };
 
 
@@ -43,12 +43,12 @@ public class ScoreSaberSource : ReplaySource
 
         if(!string.IsNullOrEmpty(info.PlayerID))
         {
-            info.PlayerProfileURL = $"{ApiConfig.ScoreSaberBaseURL}u/{info.PlayerID}";
+            info.PlayerProfileURL = $"{BaseURL}u/{info.PlayerID}";
         }
 
         if(leaderboard?.map?.id > 0 && leaderboard.id > 0)
         {
-            info.LeaderboardURL = $"{ApiConfig.ScoreSaberBaseURL}map/{leaderboard.map.id}/difficulty/{leaderboard.id}";
+            info.LeaderboardURL = $"{BaseURL}map/{leaderboard.map.id}/difficulty/{leaderboard.id}";
         }
 
         info.LoadSourceData = replay => LoadSourceDataAsync(info, replay);
@@ -91,7 +91,7 @@ public class ScoreSaberSource : ReplaySource
         if(!string.IsNullOrEmpty(replay.info?.playerID))
         {
             source.PlayerID = replay.info.playerID;
-            source.PlayerProfileURL = $"{ApiConfig.ScoreSaberBaseURL}u/{source.PlayerID}";
+            source.PlayerProfileURL = $"{BaseURL}u/{source.PlayerID}";
         }
 
         if(string.IsNullOrEmpty(source.AvatarURL)) return;
