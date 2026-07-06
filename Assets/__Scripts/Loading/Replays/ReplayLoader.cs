@@ -30,7 +30,29 @@ public class ReplayLoader
 
     public static Replay DecodeReplayBytes(byte[] data)
     {
-        return ReplayDecoder.Decode(data);
+        if(BsorDecoder.IsBsorV1Replay(data))
+        {
+            Debug.Log("Detected BsorV1 replay format.");
+            return BsorDecoder.Decode(data);
+        }
+
+        // scoresaber replay (magic header check)
+        if(ScoreSaberDecoder.IsScoreSaberReplay(data))
+        {
+            Debug.Log("Detected ScoreSaber replay format.");
+            return ScoreSaberDecoder.Decode(data);
+        }
+
+        // scoresaber legacy format
+        if(ScoreSaberDecoder.IsLegacyScoreSaberReplay(data))
+        {
+            Debug.Log("Detected ScoreSaber legacy replay format.");
+            Replay legacy = ScoreSaberLegacyDecoder.Decode(data);
+            if(legacy != null) return legacy;
+        }
+
+        // fall back to BsorV1
+        return BsorDecoder.Decode(data);
     }
 
 
@@ -50,13 +72,13 @@ public class ReplayLoader
             return replay;
         }
 
-        // fall back to beatleader async decoder
+        // fall back to BsorV1 async decoder
         if(replayStream.CanSeek)
         {
             replayStream.Seek(0, SeekOrigin.Begin);
         }
 
-        AsyncReplayDecoder decoder = new AsyncReplayDecoder();
+        AsyncBsorDecoder decoder = new AsyncBsorDecoder();
         (ReplayInfo, Task<Replay>) result = await decoder.StartDecodingStream(replayStream);
 
         if(result.Item2 == null)

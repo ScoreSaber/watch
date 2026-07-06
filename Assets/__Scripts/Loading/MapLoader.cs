@@ -599,6 +599,16 @@ public class MapLoader : MonoBehaviour
     }
 
 
+    private static void SetLoadedScoreID(ReplaySource source, string id)
+    {
+        if(source.SourceType == ReplaySourceType.ScoreSaber)
+        {
+            UrlArgHandler.LoadedSSScoreId = id;
+        }
+        else UrlArgHandler.LoadedBLReplayID = id;
+    }
+
+
     public async void LoadReplayURL(string url, string id = null, string mapURL = null, string mapID = null, bool noProxy = false)
     {
         ResetPendingReplay();
@@ -614,12 +624,15 @@ public class MapLoader : MonoBehaviour
         Debug.Log($"Searching for replay from {source.Name} score ID: {id}");
 
 #if !UNITY_WEBGL || UNITY_EDITOR
-        CachedFile cachedFile = CacheManager.GetCachedReplay(null, id);
-        if(!string.IsNullOrEmpty(cachedFile?.FilePath))
+        if(source.SourceType == ReplaySourceType.BeatLeader)
         {
-            Debug.Log("Found replay in cache.");
-            await LoadReplayDirectoryAsync(cachedFile.FilePath, cachedFile.ExtraData, token);
-            return;
+            CachedFile cachedFile = CacheManager.GetCachedReplay(null, id);
+            if(!string.IsNullOrEmpty(cachedFile?.FilePath))
+            {
+                Debug.Log("Found replay in cache.");
+                await LoadReplayDirectoryAsync(cachedFile.FilePath, cachedFile.ExtraData, token);
+                return;
+            }
         }
 #endif
 
@@ -652,7 +665,9 @@ public class MapLoader : MonoBehaviour
             ReplayManager.SourceInfo = resolved.SourceInfo;
         }
 
-        string replayID = id;
+        SetLoadedScoreID(source, id);
+
+        string replayID = source.SourceType == ReplaySourceType.BeatLeader ? id : null;
         Task<PreparedMapLoad> mapTask = MapDownloader.PrepareMapLoadAsync(resolved, noProxy);
         await LoadReplayURLAsync(resolved.ReplayURL, replayID, resolved.MapURL, resolved.MapID, noProxy, mapTask, token);
     }
@@ -669,7 +684,7 @@ public class MapLoader : MonoBehaviour
         if(!string.IsNullOrEmpty(cachedFile?.FilePath))
         {
             Debug.Log("Found replay in cache.");
-            UrlArgHandler.LoadedBLScoreId = id;
+            UrlArgHandler.LoadedBLReplayID = id;
             await LoadReplayDirectoryAsync(cachedFile.FilePath, cachedFile.ExtraData, token);
             return;
         }
@@ -711,14 +726,14 @@ public class MapLoader : MonoBehaviour
             return;
         }
 
-        UrlArgHandler.LoadedBLScoreId = id;
-
         if(resolved.SourceInfo != null)
         {
             ReplayManager.SourceInfo = resolved.SourceInfo;
         }
 
-        string replayID = id;
+        SetLoadedScoreID(source, id);
+
+        string replayID = source.SourceType == ReplaySourceType.BeatLeader ? id : null;
         Task<PreparedMapLoad> mapTask = MapDownloader.PrepareMapLoadAsync(resolved, noProxy);
         await LoadReplayURLAsync(resolved.ReplayURL, replayID, resolved.MapURL, resolved.MapID, noProxy, mapTask, token);
     }
@@ -837,6 +852,13 @@ public class MapLoader : MonoBehaviour
 
             if(directory.EndsWith(".dat", StringComparison.InvariantCultureIgnoreCase))
             {
+                if(ScoreSaberDecoder.IsScoreSaberFile(directory))
+                {
+                    ResetPendingReplay();
+                    _ = LoadReplayDirectoryAsync(directory, null, BeginLoading());
+                    return;
+                }
+
                 //User is trying to load an unzipped map, get the parent directory
                 DirectoryInfo parentDir = Directory.GetParent(directory);
                 FileReader fileReader = new FileReader(parentDir.FullName);
@@ -882,7 +904,7 @@ public class MapLoader : MonoBehaviour
         if(!ReplayManager.IsReplayMode)
         {
             HotReloader.loadedMapPath = null;
-            UrlArgHandler.LoadedBLScoreId = null;
+            UrlArgHandler.LoadedBLReplayID = null;
         }
         UrlArgHandler.ignoreMapForSharing = false;
 
@@ -934,7 +956,7 @@ public class MapLoader : MonoBehaviour
             //even when another replay is waiting on the map prompt
             LoadReplayFromScore(source, scoreID);
 
-            UrlArgHandler.LoadedBLScoreId = scoreID;
+            SetLoadedScoreID(source, scoreID);
             return;
         }
 

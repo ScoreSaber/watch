@@ -166,7 +166,7 @@ public class BsorV1Stream : ReplayStreamingSocket
                         case StructType.info:
                             CurrentReplay = new Replay
                             {
-                                info = ReplayDecoder.DecodeInfo(message, ref pointer)
+                                info = BsorDecoder.DecodeInfo(message, ref pointer)
                             };
                             // TODO: Figure out wtf is going on with score
                             // ResetScoreTracking();
@@ -175,7 +175,7 @@ public class BsorV1Stream : ReplayStreamingSocket
                         case StructType.frames:
                             if(CurrentReplay != null)
                             {
-                                List<Frame> newFrames = ReplayDecoder.DecodeFrames(message, ref pointer);
+                                List<Frame> newFrames = BsorDecoder.DecodeFrames(message, ref pointer);
                                 CurrentReplay.frames.AddRange(newFrames);
                                 ProcessIncrementalFrames(newFrames);
                             }
@@ -183,7 +183,7 @@ public class BsorV1Stream : ReplayStreamingSocket
                         case StructType.notes:
                             if(CurrentReplay != null)
                             {
-                                List<NoteEvent> newNotes = ReplayDecoder.DecodeNotes(message, ref pointer);
+                                List<NoteEvent> newNotes = BsorDecoder.DecodeNotes(message, ref pointer);
                                 CurrentReplay.notes.AddRange(newNotes);
                                 ProcessIncrementalNotes(newNotes);
                             }
@@ -191,7 +191,7 @@ public class BsorV1Stream : ReplayStreamingSocket
                         case StructType.walls:
                             if(CurrentReplay != null)
                             {
-                                List<WallEvent> newWalls = ReplayDecoder.DecodeWalls(message, ref pointer);
+                                List<WallEvent> newWalls = BsorDecoder.DecodeWalls(message, ref pointer);
                                 CurrentReplay.walls.AddRange(newWalls);
                                 ProcessIncrementalWalls(newWalls);
                             }
@@ -199,7 +199,7 @@ public class BsorV1Stream : ReplayStreamingSocket
                         case StructType.heights:
                             if(CurrentReplay != null)
                             {
-                                List<AutomaticHeight> newHeights = ReplayDecoder.DecodeHeight(message, ref pointer);
+                                List<AutomaticHeight> newHeights = BsorDecoder.DecodeHeight(message, ref pointer);
                                 CurrentReplay.heights.AddRange(newHeights);
                                 ProcessIncrementalPlayerHeight(newHeights);
                             }
@@ -207,7 +207,7 @@ public class BsorV1Stream : ReplayStreamingSocket
                         case StructType.pauses:
                             if(CurrentReplay != null)
                             {
-                                List<Pause> newPauses = ReplayDecoder.DecodePauses(message, ref pointer);
+                                List<Pause> newPauses = BsorDecoder.DecodePauses(message, ref pointer);
                                 CurrentReplay.pauses.AddRange(newPauses);
                                 foreach (Pause pause in newPauses)
                                 {
@@ -221,11 +221,11 @@ public class BsorV1Stream : ReplayStreamingSocket
                 {
                     if(CurrentReplay != null)
                     {
-                        CurrentReplay.info = ReplayDecoder.DecodeInfo(message, ref pointer);
+                        CurrentReplay.info = BsorDecoder.DecodeInfo(message, ref pointer);
                     }
-                    EndType = (LevelEndType)ReplayDecoder.DecodeInt(message, ref pointer);
-                    FailTime = ReplayDecoder.DecodeFloat(message, ref pointer);
-                    ShouldUpload = ReplayDecoder.DecodeBool(message, ref pointer);
+                    EndType = (LevelEndType)BsorDecoder.DecodeInt(message, ref pointer);
+                    FailTime = BsorDecoder.DecodeFloat(message, ref pointer);
+                    ShouldUpload = BsorDecoder.DecodeBool(message, ref pointer);
 
                     // TODO: Handle map end state
                 }

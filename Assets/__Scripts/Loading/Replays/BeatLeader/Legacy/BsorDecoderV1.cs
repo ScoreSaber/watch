@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
 
-public class AsyncReplayDecoder
+public class AsyncBsorDecoder
 {
     public Replay replay = new Replay();
 
@@ -380,8 +380,19 @@ public class AsyncReplayDecoder
     }
 }
 
-public static class ReplayDecoder
+public static class BsorDecoder
 {
+    private const int MagicNumber = 0x442d3d69;
+
+    public static bool IsBsorV1Replay(byte[] buffer)
+    {
+        int pointer = 0;
+        int magic = DecodeInt(buffer, ref pointer);
+        byte version = buffer[pointer++];
+
+        return magic == MagicNumber && version == 1;
+    }
+
     public static Replay Decode(byte[] buffer)
     {
         int arrayLength = (int)buffer.Length;
@@ -391,7 +402,7 @@ public static class ReplayDecoder
         int magic = DecodeInt(buffer, ref pointer);
         byte version = buffer[pointer++];
 
-        if(magic == 0x442d3d69 && version == 1)
+        if(magic == MagicNumber && version == 1)
         {
             Replay replay = new Replay();
 
@@ -577,7 +588,7 @@ public static class ReplayDecoder
         return result;
     }
 
-    public static NoteEvent DecodeNote(byte[] buffer, ref int pointer)
+    private static NoteEvent DecodeNote(byte[] buffer, ref int pointer)
     {
         NoteEvent result = new NoteEvent();
         result.noteID = DecodeInt(buffer, ref pointer);
@@ -598,7 +609,7 @@ public static class ReplayDecoder
         return result;
     }
 
-    public static NoteCutInfo DecodeCutInfo(byte[] buffer, ref int pointer)
+    private static NoteCutInfo DecodeCutInfo(byte[] buffer, ref int pointer)
     {
         NoteCutInfo result = new NoteCutInfo();
         result.speedOK = DecodeBool(buffer, ref pointer);

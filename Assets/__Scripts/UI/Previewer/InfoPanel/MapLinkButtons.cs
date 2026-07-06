@@ -12,6 +12,7 @@ public class MapLinkButtons : MonoBehaviour
     [SerializeField] private Image leaderboardIcon;
     [SerializeField] private Tooltip leaderboardTooltip;
     [SerializeField] private Sprite beatLeaderIcon;
+    [SerializeField] private Sprite scoreSaberIcon;
 
     private const string beatSaverURL = "https://beatsaver.com/";
     private const string mapDirect = "maps/";
@@ -64,7 +65,11 @@ public class MapLinkButtons : MonoBehaviour
     {
         if(leaderboardIcon != null)
         {
-            leaderboardIcon.sprite = beatLeaderIcon;
+            leaderboardIcon.sprite = source.SourceType switch
+            {
+                ReplaySourceType.ScoreSaber => scoreSaberIcon,
+                _ => beatLeaderIcon
+            };
         }
 
         if(leaderboardTooltip != null)
@@ -79,7 +84,7 @@ public class MapLinkButtons : MonoBehaviour
     private void UpdateShareButton()
     {
         bool enable = ReplayManager.IsReplayMode
-            ? !string.IsNullOrEmpty(UrlArgHandler.LoadedBLScoreId) || !string.IsNullOrEmpty(UrlArgHandler.LoadedReplayURL)
+            ? !string.IsNullOrEmpty(UrlArgHandler.LoadedBLReplayID) || !string.IsNullOrEmpty(UrlArgHandler.LoadedReplayURL) || !string.IsNullOrEmpty(UrlArgHandler.LoadedSSScoreId)
             : !string.IsNullOrEmpty(UrlArgHandler.LoadedMapID) || !string.IsNullOrEmpty(UrlArgHandler.LoadedMapURL);
         shareButton.SetActive(enable);
     }

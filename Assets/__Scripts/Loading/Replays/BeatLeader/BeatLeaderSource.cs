@@ -9,8 +9,8 @@ public class BeatLeaderSource : ReplaySource
     public override ReplaySourceType SourceType => ReplaySourceType.BeatLeader;
     public override string Name => "BeatLeader";
     public override string[] InputPrefixes => new[] { "bl:", "beatleader:" };
-    public override string BaseURL => "https://beatleader.com/";
-    public override string ApiURL => "https://api.beatleader.com/";
+    public override string BaseURL => ApiConfig.BeatLeaderBaseURL;
+    public override string ApiURL => ApiConfig.BeatLeaderApiURL;
 
 
     public override ReplaySourceInfo CreateInfo()
@@ -157,7 +157,7 @@ public class BeatLeaderSource : ReplaySource
 
         if(!string.IsNullOrEmpty(user.id))
         {
-            source.PlayerProfileURL = $"{ReplaySources.BeatLeader.BaseURL}u/{user.id}";
+            source.PlayerProfileURL = $"{ApiConfig.BeatLeaderBaseURL}u/{user.id}";
         }
 
         if(user.profileSettings != null
@@ -178,7 +178,7 @@ public class BeatLeaderSource : ReplaySource
     {
         if(!string.IsNullOrEmpty(leaderboardID))
         {
-            source.LeaderboardURL = $"{ReplaySources.BeatLeader.BaseURL}leaderboard/global/{leaderboardID}";
+            source.LeaderboardURL = $"{ApiConfig.BeatLeaderBaseURL}leaderboard/global/{leaderboardID}";
         }
     }
 }

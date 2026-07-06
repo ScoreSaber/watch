@@ -5,7 +5,8 @@ using UnityEngine;
 public enum ReplaySourceType
 {
     Unknown,
-    BeatLeader
+    BeatLeader,
+    ScoreSaber
 }
 
 public class ReplaySourceInfo
@@ -41,6 +42,7 @@ public class ReplaySourceInfo
     public string SourceName => SourceType switch
     {
         ReplaySourceType.BeatLeader => "BeatLeader",
+        ReplaySourceType.ScoreSaber => "ScoreSaber",
         _ => ""
     };
 

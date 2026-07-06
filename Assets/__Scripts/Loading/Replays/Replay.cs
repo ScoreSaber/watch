@@ -13,6 +13,18 @@ public class Replay
     public List<Pause> pauses = new List<Pause>();
     public SaberOffsets saberOffsets = new SaberOffsets();
     public Dictionary<string, byte[]> customData = new Dictionary<string, byte[]>();
+
+    public List<LegacyScoreFrame> scoreSaberLegacyScoreData;
+    public bool scoreSaberLegacyConverted;
+    public LegacyHUDData scoreSaberLegacyHUDData;
+}
+
+
+public struct LegacyScoreFrame
+{
+    public float time;
+    public int score;
+    public int combo;
 }
 
 public class ReplayInfo

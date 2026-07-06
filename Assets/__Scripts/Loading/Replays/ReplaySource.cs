@@ -65,9 +65,10 @@ public abstract class ReplaySource
 public static class ReplaySources
 {
     public static readonly BeatLeaderSource BeatLeader = new BeatLeaderSource();
+    public static readonly ScoreSaberSource ScoreSaber = new ScoreSaberSource();
 
     //Automatic score ID resolution is attempted in this order
-    public static readonly ReplaySource[] All = { BeatLeader };
+    public static readonly ReplaySource[] All = { BeatLeader, ScoreSaber };
 
 
     public static ReplaySource FromType(ReplaySourceType sourceType)
