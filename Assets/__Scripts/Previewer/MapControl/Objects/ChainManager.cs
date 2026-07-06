@@ -144,6 +144,7 @@ public class ChainManager : MapElementManager<ChainLink>
                         newLink.wasMissed = false;
                         newLink.WasBadCut = matchingEvent.noteEventType == NoteEventType.bad;
                         newLink.HitOffset = matchingEvent.HitTimeOffset;
+                        newLink.HitTime = matchingEvent.Time;
                     }
 
                     Vector2 worldPosition = objectManager.ObjectSpaceToWorldSpace(newLink.Position);
@@ -302,7 +303,8 @@ public class ChainManager : MapElementManager<ChainLink>
                     RenderedObjects.Remove(cl);
                 }
             }
-            else cl.ChainLinkHandler.EnableVisual();
+            else if(cl.ShouldShowVisual) cl.ChainLinkHandler.EnableVisual();
+            else cl.ChainLinkHandler.DisableVisual();
         }
     }
 
@@ -327,6 +329,10 @@ public class ChainManager : MapElementManager<ChainLink>
             if(jumpManager.CheckInSpawnRange(cl.Time, cl.CustomRT ?? jumpManager.ReactionTime, !cl.WasHit, true, cl.HitOffset))
             {
                 UpdateVisual(cl);
+                if(!cl.ShouldShowVisual)
+                {
+                    cl.ChainLinkHandler.DisableVisual();
+                }
             }
             else if(!VisualInSpawnRange(cl))
             {
