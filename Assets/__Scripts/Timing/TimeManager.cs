@@ -12,6 +12,17 @@ public class TimeManager : MonoBehaviour
     public static bool ForcePause;
 
     public static bool Playing { get; private set; }
+    public static bool UsesSongClock
+    {
+        get
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return Playing && SongManager.HasSong && !Scrubbing;
+#else
+            return false;
+#endif
+        }
+    }
 
     public static bool Loop = false;
 
@@ -291,7 +302,9 @@ public class TimeManager : MonoBehaviour
     {
         if(Playing)
         {
-            CurrentTime += Time.deltaTime * TimeScale;
+            CurrentTime = UsesSongClock
+                ? SongManager.GetSongTime()
+                : CurrentTime + (Time.deltaTime * TimeScale);
         }
     }
 

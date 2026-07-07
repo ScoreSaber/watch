@@ -1,27 +1,106 @@
 var SongController = {
 
+    $ArcViewerSongAudioUnlock: {
+        StartDelaySeconds: 0.035,
+
+        InstallUnlockHandlers: function () {
+            if (typeof window === 'undefined' || typeof document === 'undefined' || window.__arcViewerAudioUnlockInstalled) {
+                return;
+            }
+
+            window.__arcViewerAudioUnlockInstalled = true;
+            const unlock = () => {
+                ArcViewerSongAudioUnlock.ResumeAudioContexts();
+            };
+
+            document.addEventListener("pointerdown", unlock, true);
+            document.addEventListener("touchstart", unlock, true);
+            document.addEventListener("keydown", unlock, true);
+            document.addEventListener("click", unlock, true);
+        },
+
+        ResumeAudioContexts: function () {
+            if (typeof SongCtx !== 'undefined' && SongCtx.state === "suspended") {
+                SongCtx.resume().catch(() => {});
+            }
+            if (typeof AudioCtx !== 'undefined' && AudioCtx.state === "suspended") {
+                AudioCtx.resume().catch(() => {});
+            }
+        },
+
+        ContextRunning: function (ctx) {
+            return typeof ctx === 'undefined' || ctx.state === "running";
+        },
+
+        GetControllerSongTime: function (controller) {
+            if (!controller) {
+                return 0;
+            }
+
+            if (!controller.playing || typeof SongCtx === 'undefined' || SongCtx.state !== "running") {
+                return controller.soundStartTime;
+            }
+
+            const contextPassedTime = Math.max(0, SongCtx.currentTime - controller.lastPlayed);
+            const performancePassedTime = Math.max(0, (performance.now() / 1000) - controller.performanceStartTime);
+            const passedTime = Math.min(contextPassedTime, performancePassedTime);
+            return controller.soundStartTime + (passedTime * controller.playbackSpeed);
+        },
+
+        StopSource: function (clip) {
+            try {
+                clip.stop();
+            }
+            catch (err) {
+                // browsers can throw if the source is still scheduled in a suspended context
+                if (!err || err.name !== "InvalidStateError") {
+                    throw err;
+                }
+            }
+        },
+
+        DisconnectNode: function (node, destination) {
+            try {
+                node.disconnect(destination);
+            }
+            catch (err) {
+                // cleanup can race with source replacement when loading another song
+                if (!err || err.name !== "InvalidAccessError") {
+                    throw err;
+                }
+            }
+        }
+    },
+
+    InitSongController__deps: ["$ArcViewerSongAudioUnlock"],
+    DisposeSongClip__deps: ["$ArcViewerSongAudioUnlock"],
+    UploadSongData__deps: ["$ArcViewerSongAudioUnlock"],
+    StartSong__deps: ["$ArcViewerSongAudioUnlock"],
+    StopSong__deps: ["$ArcViewerSongAudioUnlock"],
+    GetSongTime__deps: ["$ArcViewerSongAudioUnlock"],
+    SetSongPlaybackSpeed__deps: ["$ArcViewerSongAudioUnlock"],
+    IsSongAudioReady__deps: ["$ArcViewerSongAudioUnlock"],
+    RequestSongAudioUnlock__deps: ["$ArcViewerSongAudioUnlock"],
+
     InitSongController: function (volume) {
         if (typeof SongCtx === 'undefined') {
             SongCtx = new AudioContext();
         }
 
         this.playing = false;
-        this.volume = volume;
+        this.volume = Math.max(0, volume);
         this.playbackSpeed = 1;
         this.lastPlayed = SongCtx.currentTime;
+        this.performanceStartTime = performance.now() / 1000;
         this.soundStartTime = 0;
         this.soundOffset = 0;
 
-        this.lastContextTime = null;
-        this.lastFrameTime = null;
-
         this.gainNode = SongCtx.createGain();
-        this.gainNode.gain.setValueAtTime(0.0001, SongCtx.currentTime);
+        this.gainNode.gain.setValueAtTime(this.volume, SongCtx.currentTime);
         this.gainNode.connect(SongCtx.destination);
 
-        if (this.volume < 0.0001) {
-            this.volume = 0.0001;
-        }
+        ArcViewerSongAudioUnlock.InstallUnlockHandlers();
+        ArcViewerSongAudioUnlock.ResumeAudioContexts();
     },
 
     DisposeSongClip: function () {
@@ -30,8 +109,8 @@ var SongController = {
         }
 
         if (this.playing) {
-            this.clip.stop();
-            this.clip.disconnect(this.gainNode);
+            ArcViewerSongAudioUnlock.StopSource(this.clip);
+            ArcViewerSongAudioUnlock.DisconnectNode(this.clip, this.gainNode);
         }
 
         delete (this.clip.buffer);
@@ -55,8 +134,8 @@ var SongController = {
 
         if (this.clip) {
             if (this.playing) {
-                this.clip.stop();
-                this.clip.disconnect(this.gainNode);
+                ArcViewerSongAudioUnlock.StopSource(this.clip);
+                ArcViewerSongAudioUnlock.DisconnectNode(this.clip, this.gainNode);
             }
 
             delete (this.clip.buffer);
@@ -92,9 +171,15 @@ var SongController = {
             return;
         }
 
-        this.gainNode.gain.setValueAtTime(0.0001, SongCtx.currentTime);
+        ArcViewerSongAudioUnlock.ResumeAudioContexts();
+
+        this.gainNode.gain.cancelScheduledValues(SongCtx.currentTime);
+        this.gainNode.gain.setValueAtTime(this.volume > 0 ? 0.0001 : 0, SongCtx.currentTime);
         if (this.volume > 0.0001) {
             this.gainNode.gain.exponentialRampToValueAtTime(this.volume, SongCtx.currentTime + 0.075);
+        }
+        else {
+            this.gainNode.gain.setValueAtTime(this.volume, SongCtx.currentTime);
         }
 
         //Create a new clip to play because after it plays it's forfeit
@@ -104,8 +189,9 @@ var SongController = {
         newClip.playbackRate.value = this.playbackSpeed;
         newClip.connect(this.gainNode);
 
-        //Schedule the music to start playing 35ms in the future to avoid desync
-        this.lastPlayed = SongCtx.currentTime + 0.035;
+        const startDelay = ArcViewerSongAudioUnlock.StartDelaySeconds;
+        this.lastPlayed = SongCtx.currentTime + startDelay;
+        this.performanceStartTime = (performance.now() / 1000) + startDelay;
         this.soundStartTime = time;
 
         let startTime = time + this.soundOffset;
@@ -125,9 +211,6 @@ var SongController = {
             newClip.start(this.lastPlayed - startTime, 0);
         }
 
-        this.lastContextTime = null;
-        this.lastFrameTime = null;
-
         delete (this.clip);
         this.clip = newClip;
         this.playing = true;
@@ -138,8 +221,13 @@ var SongController = {
             return;
         }
 
+        const stoppedTime = ArcViewerSongAudioUnlock.GetControllerSongTime(this);
+
+        this.gainNode.gain.cancelScheduledValues(SongCtx.currentTime);
         this.gainNode.gain.setValueAtTime(this.volume, SongCtx.currentTime);
-        this.gainNode.gain.exponentialRampToValueAtTime(0.0001, SongCtx.currentTime + 0.075);
+        if (this.volume > 0.0001) {
+            this.gainNode.gain.exponentialRampToValueAtTime(0.0001, SongCtx.currentTime + 0.075);
+        }
 
         const clip = this.clip;
         const wasPlaying = this.playing;
@@ -149,20 +237,21 @@ var SongController = {
         //Create a new audio context to avoid desync stemming from AudioContext.currentTime
         SongCtx = new AudioContext();
         this.gainNode = SongCtx.createGain();
-        this.gainNode.gain.setValueAtTime(0.0001, SongCtx.currentTime);
+        this.gainNode.gain.setValueAtTime(this.volume > 0 ? 0.0001 : 0, SongCtx.currentTime);
         this.gainNode.connect(SongCtx.destination);
 
+        this.soundStartTime = stoppedTime;
+        this.lastPlayed = SongCtx.currentTime;
+        this.performanceStartTime = performance.now() / 1000;
         this.playing = false;
+
         setTimeout(function () {
             if (clip && wasPlaying) {
-                clip.stop();
-                clip.disconnect(oldGain);
+                ArcViewerSongAudioUnlock.StopSource(clip);
+                ArcViewerSongAudioUnlock.DisconnectNode(clip, oldGain);
             }
 
-            oldGain.disconnect(oldCtx.destination);
-
-            this.lastContextTime = null;
-            this.lastFrameTime = null;
+            ArcViewerSongAudioUnlock.DisconnectNode(oldGain, oldCtx.destination);
 
             delete (oldGain);
             oldCtx.close();
@@ -171,21 +260,7 @@ var SongController = {
     },
 
     GetSongTime: function () {
-        //Use the high-precision performance.now() method to calculate a frame delta
-        const frameTime = performance.now() / 1000;
-        const delta = this.lastFrameTime != null ? Math.max(0, frameTime - this.lastFrameTime) : 0;
-
-        let currentTime = SongCtx.currentTime;
-        if(this.lastContextTime && currentTime - this.lastContextTime < 0.0001) {
-            //Use frame delta if we have not proceeded a full AudioCtx timestep
-            currentTime = this.lastContextTime + delta;
-        }
-
-        this.lastContextTime = currentTime;
-        this.lastFrameTime = frameTime;
-
-        const passedTime = currentTime - this.lastPlayed;
-        return this.soundStartTime + (passedTime * this.playbackSpeed);
+        return ArcViewerSongAudioUnlock.GetControllerSongTime(this);
     },
 
     GetSongLength: function () {
@@ -202,22 +277,19 @@ var SongController = {
     },
 
     SetSongVolume: function (volume) {
-        this.volume = volume;
-        if (this.volume < 0.0001) {
-            this.volume = 0.0001;
-        }
+        this.volume = Math.max(0, volume);
 
         if (this.playing) {
-            this.gainNode.gain.setValueAtTime(volume, SongCtx.currentTime);
+            this.gainNode.gain.cancelScheduledValues(SongCtx.currentTime);
+            this.gainNode.gain.setValueAtTime(this.volume, SongCtx.currentTime);
         }
     },
 
     SetSongPlaybackSpeed: function (speed) {
         if (this.playing) {
-            const passedTime = (SongCtx.currentTime - this.lastPlayed) + 0.035;
-            let time = soundStartTime + (passedTime * this.playbackSpeed);
+            const startDelay = ArcViewerSongAudioUnlock.StartDelaySeconds;
+            let time = ArcViewerSongAudioUnlock.GetControllerSongTime(this);
 
-            this.lastPlayed = SongCtx.currentTime + 0.035;
             let startTime = time + this.soundOffset;
 
             if (startTime < 0) {
@@ -225,10 +297,10 @@ var SongController = {
                 //This fixes a very niche bug where changing playback speed with negative offset,
                 //before the sound actually starts playing, causes it to desync
                 const clip = this.clip;
-                clip.stop();
-                clip.disconnect(this.gainNode);
+                ArcViewerSongAudioUnlock.StopSource(clip);
+                ArcViewerSongAudioUnlock.DisconnectNode(clip, this.gainNode);
 
-                this.gainNode.disconnect(SongCtx.destination);
+                ArcViewerSongAudioUnlock.DisconnectNode(this.gainNode, SongCtx.destination);
                 delete (this.gainNode);
                 SongCtx.close();
                 delete (SongCtx);
@@ -237,6 +309,9 @@ var SongController = {
                 this.gainNode = SongCtx.createGain();
                 this.gainNode.gain.setValueAtTime(this.volume, SongCtx.currentTime);
                 this.gainNode.connect(SongCtx.destination);
+
+                this.lastPlayed = SongCtx.currentTime + startDelay;
+                this.performanceStartTime = (performance.now() / 1000) + startDelay;
 
                 const newClip = SongCtx.createBufferSource();
                 newClip.buffer = clip.buffer;
@@ -252,6 +327,8 @@ var SongController = {
                 this.clip = newClip;
             }
             else {
+                this.lastPlayed = SongCtx.currentTime + startDelay;
+                this.performanceStartTime = (performance.now() / 1000) + startDelay;
                 this.clip.playbackRate.setValueAtTime(speed, this.lastPlayed);
             }
 
@@ -263,6 +340,17 @@ var SongController = {
 
     GetSongPlaybackSpeed: function () {
         return this.playbackSpeed;
+    },
+
+    IsSongAudioReady: function () {
+        const songReady = ArcViewerSongAudioUnlock.ContextRunning(typeof SongCtx === 'undefined' ? undefined : SongCtx);
+        const hitSoundReady = ArcViewerSongAudioUnlock.ContextRunning(typeof AudioCtx === 'undefined' ? undefined : AudioCtx);
+        return songReady && hitSoundReady ? 1 : 0;
+    },
+
+    RequestSongAudioUnlock: function () {
+        ArcViewerSongAudioUnlock.InstallUnlockHandlers();
+        ArcViewerSongAudioUnlock.ResumeAudioContexts();
     }
 };
 

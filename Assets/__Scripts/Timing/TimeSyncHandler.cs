@@ -29,6 +29,11 @@ public class TimeSyncHandler : MonoBehaviour
             return;
         }
 
+        if(TimeManager.UsesSongClock)
+        {
+            return;
+        }
+
         float musicTime = SongManager.GetSongTime();
         float discrepancy = TimeManager.CurrentTime - musicTime;
 
