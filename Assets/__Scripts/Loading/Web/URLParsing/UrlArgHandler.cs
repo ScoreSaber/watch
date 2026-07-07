@@ -361,15 +361,20 @@ public class UrlArgHandler : MonoBehaviour
         yield return null;
 
 #if UNITY_WEBGL && !UNITY_EDITOR
-        bool needsAudio = !SettingsManager.Loaded;
-        if(!needsAudio)
+        while(!WebSongController.SongAudioReady)
         {
-            needsAudio = (SettingsManager.GetBool("enablemusic") && SettingsManager.GetFloat("musicvolume") > Mathf.Epsilon)
-                || (SettingsManager.GetBool("enablehitsound") && SettingsManager.GetFloat("hitsoundvolume") > Mathf.Epsilon);
-        }
+            bool needsAudio = !SettingsManager.Loaded;
+            if(!needsAudio)
+            {
+                needsAudio = (SettingsManager.GetBool("enablemusic") && SettingsManager.GetFloat("musicvolume") > Mathf.Epsilon)
+                    || (SettingsManager.GetBool("enablehitsound") && SettingsManager.GetFloat("hitsoundvolume") > Mathf.Epsilon);
+            }
 
-        while(needsAudio && !WebSongController.SongAudioReady)
-        {
+            if(!needsAudio)
+            {
+                break;
+            }
+
             WebSongController.RequestAudioUnlock();
             yield return null;
         }
