@@ -34,6 +34,12 @@ public class WebSongController : MonoBehaviour
     [DllImport("__Internal")]
     public static extern void StopSong();
 
+    [DllImport("__Internal")]
+    private static extern int IsSongAudioReady();
+
+    [DllImport("__Internal")]
+    private static extern void RequestSongAudioUnlock();
+
     private static WebSongController instance;
     private static Action<int> callback;
 
@@ -69,6 +75,27 @@ public class WebSongController : MonoBehaviour
         return audioSource;
 #else
         throw new Exception("AllocateAudioSource is only available outside WebGL.");
+#endif
+    }
+
+
+    public static bool SongAudioReady
+    {
+        get
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return IsSongAudioReady() != 0;
+#else
+            return true;
+#endif
+        }
+    }
+
+
+    public static void RequestAudioUnlock()
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        RequestSongAudioUnlock();
 #endif
     }
 

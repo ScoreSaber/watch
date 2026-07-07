@@ -7,6 +7,7 @@ public class GraphicSettingsUpdater : MonoBehaviour
     [SerializeField] private Volume bloomVolume;
     [SerializeField] private UniversalRenderPipelineAsset urpAsset;
     [SerializeField] private RenderTexture orthoCameraTexture;
+    [SerializeField] private Camera lightGlowCamera;
 
     [Space]
     [SerializeField] private float defaultBloomStrength;
@@ -37,6 +38,34 @@ public class GraphicSettingsUpdater : MonoBehaviour
                 return 4;
             case 3:
                 return 8;
+        }
+    }
+
+
+    private Camera GetLightGlowCamera()
+    {
+        if(lightGlowCamera)
+        {
+            return lightGlowCamera;
+        }
+
+        Camera mainCamera = Camera.main;
+        Transform lightGlowCameraTransform = mainCamera ? mainCamera.transform.Find("Bloomfog/LightGlowCamera") : null;
+        if(lightGlowCameraTransform)
+        {
+            lightGlowCamera = lightGlowCameraTransform.GetComponent<Camera>();
+        }
+
+        return lightGlowCamera;
+    }
+
+
+    private void SetLightGlowCameraEnabled(bool enabled)
+    {
+        Camera camera = GetLightGlowCamera();
+        if(camera)
+        {
+            camera.enabled = enabled;
         }
     }
 
@@ -101,13 +130,13 @@ public class GraphicSettingsUpdater : MonoBehaviour
         if(allSettings || setting == "bloomfogquality" || setting == "lightglowbrightness")
         {
             float bloomfogBrightness = Mathf.Clamp(SettingsManager.GetFloat("lightglowbrightness"), 0f, 2f);
-            if(bloomfogBrightness < 0.001f)
+            bool bloomfogEnabled = bloomfogBrightness >= 0.001f;
+
+            Bloomfog.Enabled = bloomfogEnabled;
+            SetLightGlowCameraEnabled(bloomfogEnabled);
+
+            if(bloomfogEnabled)
             {
-                Bloomfog.Enabled = false;
-            }
-            else
-            {
-                Bloomfog.Enabled = true;
                 Bloomfog.Quality = SettingsManager.GetInt("bloomfogquality", false);
             }
         }

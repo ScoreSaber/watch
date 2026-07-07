@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -35,6 +36,7 @@ public class MapLoader : MonoBehaviour
     //Cancels in-flight loading tasks whenever a load finishes or is cancelled,
     //so stale tasks can't clobber newer loads
     private CancellationTokenSource loadCancelSource;
+    private int coverLoadID;
 
 
     private CancellationToken BeginLoading(string message = null)
@@ -74,27 +76,143 @@ public class MapLoader : MonoBehaviour
             Debug.LogWarning($"Map loading failed with error: {err.Message}, {err.StackTrace}");
             mapData = LoadedMap.Empty;
         }
-        finally
-        {
-            loader.Dispose();
-        }
 
         if(token.IsCancellationRequested)
         {
+            loader.Dispose();
             return;
         }
 
         Debug.Log("Loading complete.");
-        LoadingMessage = "Done";
-
         LoadingMessage = "Initializing";
-        //Wait 2 frames to ensure the text updates
-        await Awaitable.NextFrameAsync();
-        await Awaitable.NextFrameAsync();
 
-        if(!token.IsCancellationRequested)
+        TryLoadEnvironmentEarly(mapData);
+        TryConvertScoreSaberLegacyReplay(mapData);
+        int mapCoverLoadID = SetMap(mapData);
+
+        if(loader is ZipReader zipReader && ShouldLoadDeferredZipCover(mapData))
         {
-            SetMap(mapData);
+            StartCoroutine(LoadZipCoverImageDeferred(zipReader, mapData.Info, mapCoverLoadID));
+        }
+        else loader.Dispose();
+    }
+
+
+    private static void TryLoadEnvironmentEarly(LoadedMap mapData)
+    {
+        if(mapData == null || mapData.Info == null || mapData.Difficulties == null || mapData.Difficulties.Count == 0 || mapData.Song == null)
+        {
+            return;
+        }
+
+        EnvironmentManager.TryLoadEnvironmentForDifficulty(GetDefaultDifficulty(mapData.Difficulties));
+    }
+
+
+    private static Difficulty GetDefaultDifficulty(List<Difficulty> difficulties)
+    {
+        List<Difficulty> sortedDifficulties = difficulties.OrderBy(x => x.difficultyRank).ToList();
+        IEnumerable<DifficultyCharacteristic> characteristics = Enum.GetValues(typeof(DifficultyCharacteristic)).Cast<DifficultyCharacteristic>();
+        foreach(DifficultyCharacteristic characteristic in characteristics)
+        {
+            Difficulty difficulty = null;
+            foreach(Difficulty candidate in sortedDifficulties)
+            {
+                if(candidate.characteristic != characteristic)
+                {
+                    continue;
+                }
+
+                if(difficulty == null || candidate.difficultyRank > difficulty.difficultyRank)
+                {
+                    difficulty = candidate;
+                }
+            }
+
+            if(difficulty != null)
+            {
+                return difficulty;
+            }
+        }
+
+        return Difficulty.Empty;
+    }
+
+
+    private static bool ShouldLoadDeferredZipCover(LoadedMap mapData)
+    {
+        return mapData.Info != null
+            && mapData.Difficulties != null
+            && mapData.Difficulties.Count > 0
+            && mapData.Song != null;
+    }
+
+
+    private bool IsCurrentCoverLoad(int mapCoverLoadID)
+    {
+        return mapCoverLoadID == coverLoadID && !Loading && UIStateManager.CurrentState == UIState.Previewer;
+    }
+
+
+    private IEnumerator SetCoverImageFromDataDeferred(byte[] coverImageData, int mapCoverLoadID)
+    {
+        yield return null;
+
+        if(!IsCurrentCoverLoad(mapCoverLoadID))
+        {
+            yield break;
+        }
+
+        CoverImageHandler.Instance.SetImageFromData(coverImageData);
+    }
+
+
+    private IEnumerator LoadZipCoverImageDeferred(ZipReader zipReader, BeatmapInfo info, int mapCoverLoadID)
+    {
+        yield return null;
+
+        bool shouldLoadCover = IsCurrentCoverLoad(mapCoverLoadID);
+        try
+        {
+            if(shouldLoadCover)
+            {
+                byte[] coverImageData = zipReader.LoadCoverImageData(info);
+                if(coverImageData != null && coverImageData.Length > 0 && IsCurrentCoverLoad(mapCoverLoadID))
+                {
+                    CoverImageHandler.Instance.SetImageFromData(coverImageData);
+                }
+            }
+        }
+        finally
+        {
+            zipReader.Dispose();
+        }
+    }
+
+
+    private static void TryConvertScoreSaberLegacyReplay(LoadedMap mapData)
+    {
+        Replay replay = ReplayManager.CurrentReplay;
+        if(!ReplayManager.IsReplayMode || replay == null || !ScoreSaberLegacyConverter.NeedsConversion(replay))
+        {
+            return;
+        }
+
+        if(mapData?.Info == null || mapData.Difficulties == null || mapData.Difficulties.Count != 1)
+        {
+            return;
+        }
+
+        Difficulty difficulty = mapData.Difficulties[0];
+        if(difficulty?.beatmapDifficulty == null)
+        {
+            return;
+        }
+
+        ScoreSaberLegacyConverter.Convert(replay, difficulty.beatmapDifficulty, mapData.Info.audio.bpm);
+        if(replay.scoreSaberLegacyConverted)
+        {
+            ScoreManager.RebuildScoringEventsFromReplayNotes(replay);
         }
     }
 
@@ -342,11 +460,18 @@ public class MapLoader : MonoBehaviour
 
         ReplayManager.SetReplay(replay);
 
-        Task sourceDataTask = LoadSourceDataAsync(sourceInfo, replay);
+        Task sourceDataTask = null;
+        Task StartSourceDataLoad()
+        {
+            sourceDataTask ??= LoadSourceDataAsync(sourceInfo, replay);
+            return sourceDataTask;
+        }
+
         if(mapTask != null)
         {
             if(await TryLoadPreparedMapAsync(mapTask, true, token))
             {
+                _ = StartSourceDataLoad();
                 return;
             }
 
@@ -384,14 +509,7 @@ public class MapLoader : MonoBehaviour
             if(!sourceInfo.HasFallbackMap)
             {
                 LoadingMessage = "Loading player profile";
-                try
-                {
-                    await sourceDataTask;
-                }
-                catch(Exception err)
-                {
-                    Debug.LogWarning($"Replay source data loading failed with error: {err.Message}, {err.StackTrace}");
-                }
+                await StartSourceDataLoad();
 
                 if(token.IsCancellationRequested)
                 {
@@ -417,19 +535,25 @@ public class MapLoader : MonoBehaviour
             else await LoadMapFromReplayAsync(replay, noProxy, token);
         }
         else await LoadMapFromReplayAsync(replay, noProxy, token);
+
+        _ = StartSourceDataLoad();
     }
 
 
-    private static Task LoadSourceDataAsync(ReplaySourceInfo sourceInfo, Replay replay)
+    private static async Task LoadSourceDataAsync(ReplaySourceInfo sourceInfo, Replay replay)
     {
         try
         {
-            return sourceInfo.LoadSourceData?.Invoke(replay) ?? Task.CompletedTask;
+            if(sourceInfo?.LoadSourceData == null)
+            {
+                return;
+            }
+
+            await sourceInfo.LoadSourceData(replay);
         }
         catch(Exception err)
         {
             Debug.LogWarning($"Replay source data loading failed with error: {err.Message}, {err.StackTrace}");
-            return Task.CompletedTask;
         }
     }
 
@@ -532,7 +656,14 @@ public class MapLoader : MonoBehaviour
 
 
     private async Task LoadReplayURLAsync(
-        string url, string id, string mapURL, string mapID, bool noProxy, Task<PreparedMapLoad> mapTask, CancellationToken token)
+        string url,
+        string id,
+        string mapURL,
+        string mapID,
+        bool noProxy,
+        Task<PreparedMapLoad> mapTask,
+        CancellationToken token,
+        Task<Stream> replayStreamTask = null)
     {
         Debug.Log($"Searching for replay from: {url}");
 
@@ -540,6 +671,7 @@ public class MapLoader : MonoBehaviour
         CachedFile cachedFile = CacheManager.GetCachedReplay(url);
         if(!string.IsNullOrEmpty(cachedFile?.FilePath))
         {
+            DiscardReplayStreamTask(replayStreamTask);
             Debug.Log("Found replay in cache.");
             await LoadReplayDirectoryAsync(cachedFile.FilePath, cachedFile.ExtraData, token);
             return;
@@ -548,7 +680,22 @@ public class MapLoader : MonoBehaviour
 
         LoadingMessage = "Downloading replay";
 
-        Stream replayStream = await WebLoader.LoadFileURL(url, noProxy);
+        Stream replayStream = null;
+        if(replayStreamTask != null)
+        {
+            try
+            {
+                replayStream = await replayStreamTask;
+            }
+            catch(Exception err)
+            {
+                Debug.LogWarning($"Speculative replay download failed with error: {err.Message}, {err.StackTrace}");
+            }
+        }
+        if(replayStream == null && !token.IsCancellationRequested)
+        {
+            replayStream = await WebLoader.LoadFileURL(url, noProxy);
+        }
         if(token.IsCancellationRequested)
         {
             replayStream?.Dispose();
@@ -584,6 +731,50 @@ public class MapLoader : MonoBehaviour
 #endif
 
             await SetReplayAsync(replay, mapURL, mapID, noProxy, mapTask, token);
+        }
+    }
+
+
+    private static Task<Stream> StartSilentReplayDownload(string url, bool noProxy)
+    {
+        if(string.IsNullOrEmpty(url))
+        {
+            return null;
+        }
+
+#if !UNITY_WEBGL || UNITY_EDITOR
+        CachedFile cachedFile = CacheManager.GetCachedReplay(url);
+        if(!string.IsNullOrEmpty(cachedFile?.FilePath))
+        {
+            return null;
+        }
+#endif
+
+        return WebLoader.LoadFileURL(url, noProxy, false);
+    }
+
+
+    private static void DiscardReplayStreamTask(Task<Stream> replayStreamTask)
+    {
+        if(replayStreamTask == null)
+        {
+            return;
+        }
+
+        _ = DiscardReplayStreamTaskAsync(replayStreamTask);
+    }
+
+
+    private static async Task DiscardReplayStreamTaskAsync(Task<Stream> replayStreamTask)
+    {
+        try
+        {
+            Stream replayStream = await replayStreamTask;
+            replayStream?.Dispose();
+        }
+        catch(Exception err)
+        {
+            Debug.LogWarning($"Discarded replay download failed with error: {err.Message}, {err.StackTrace}");
         }
     }
 
@@ -638,6 +829,9 @@ public class MapLoader : MonoBehaviour
 
         LoadingMessage = $"Fetching replay from {source.Name}";
 
+        string scoreSaberReplayURL = source.SourceType == ReplaySourceType.ScoreSaber ? ScoreSaberApi.ReplayURLFromID(id) : null;
+        Task<Stream> scoreSaberReplayTask = StartSilentReplayDownload(scoreSaberReplayURL, noProxy);
+
         ResolvedScore resolved = null;
         try
         {
@@ -650,11 +844,13 @@ public class MapLoader : MonoBehaviour
 
         if(token.IsCancellationRequested)
         {
+            DiscardReplayStreamTask(scoreSaberReplayTask);
             return;
         }
 
         if(resolved == null || string.IsNullOrEmpty(resolved.ReplayURL))
         {
+            DiscardReplayStreamTask(scoreSaberReplayTask);
             Debug.Log($"Empty or nonexistent {source.Name} replay URL!");
             SetMap(LoadedMap.Empty);
             return;
@@ -668,8 +864,17 @@ public class MapLoader : MonoBehaviour
         SetLoadedScoreID(source, id);
 
         string replayID = source.SourceType == ReplaySourceType.BeatLeader ? id : null;
+        Task<Stream> replayStreamTask = null;
+        if(scoreSaberReplayTask != null)
+        {
+            if(string.Equals(scoreSaberReplayURL, resolved.ReplayURL, StringComparison.Ordinal))
+            {
+                replayStreamTask = scoreSaberReplayTask;
+            }
+            else DiscardReplayStreamTask(scoreSaberReplayTask);
+        }
         Task<PreparedMapLoad> mapTask = MapDownloader.PrepareMapLoadAsync(resolved, noProxy);
-        await LoadReplayURLAsync(resolved.ReplayURL, replayID, resolved.MapURL, resolved.MapID, noProxy, mapTask, token);
+        await LoadReplayURLAsync(resolved.ReplayURL, replayID, resolved.MapURL, resolved.MapID, noProxy, mapTask, token, replayStreamTask);
     }
 
 
@@ -785,9 +990,12 @@ public class MapLoader : MonoBehaviour
     }
 
 
-    private void SetMap(LoadedMap newMap)
+    private int SetMap(LoadedMap newMap)
     {
         CancelPendingLoads();
+        int mapCoverLoadID = ++coverLoadID;
+
+        StopAllCoroutines();
         LoadingMessage = "";
         Loading = false;
 
@@ -807,24 +1015,34 @@ public class MapLoader : MonoBehaviour
             UIStateManager.CurrentState = UIState.MapSelection;
             OnLoadingFailed?.Invoke();
 
-            return;
+            return mapCoverLoadID;
         }
 
-        UIStateManager.CurrentState = UIState.Previewer;
-
-        BeatmapManager.Info = newMap.Info;
-        SongManager.Instance.MusicClip = newMap.Song;
-
-        if(newMap.CoverImageData != null && newMap.CoverImageData.Length > 0)
+        ObjectManager.BeginMapSetVisualCoalescing();
+        try
         {
-            CoverImageHandler.Instance.SetImageFromData(newMap.CoverImageData);
+            UIStateManager.CurrentState = UIState.Previewer;
+
+            BeatmapManager.Info = newMap.Info;
+            SongManager.Instance.MusicClip = newMap.Song;
+
+            CoverImageHandler.Instance.ClearImage();
+            if(newMap.CoverImageData != null && newMap.CoverImageData.Length > 0)
+            {
+                StartCoroutine(SetCoverImageFromDataDeferred(newMap.CoverImageData, mapCoverLoadID));
+            }
+
+            BeatmapManager.SetDifficulties(newMap.Difficulties);
+            BeatmapManager.CurrentDifficulty = BeatmapManager.GetDefaultDifficulty();
+
+            OnMapLoaded?.Invoke();
         }
-        else CoverImageHandler.Instance.ClearImage();
+        finally
+        {
+            ObjectManager.EndMapSetVisualCoalescing();
+        }
 
-        BeatmapManager.SetDifficulties(newMap.Difficulties);
-        BeatmapManager.CurrentDifficulty = BeatmapManager.GetDefaultDifficulty();
-
-        OnMapLoaded?.Invoke();
+        return mapCoverLoadID;
     }
 
 

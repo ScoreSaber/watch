@@ -1,10 +1,13 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 public class ObjectManager : MonoBehaviour
 {
+    private const float SameTimeEpsilon = 0.001f;
+    private const int DeferredLoadWorkFrames = 2;
+
     public static ObjectManager Instance { get; private set; }
 
     [Header("Animation Settings")]
@@ -22,20 +25,32 @@ public class ObjectManager : MonoBehaviour
     [SerializeField] public ArcManager arcManager;
     [SerializeField] public JumpManager jumpManager;
 
-    public bool forceGameAccuracy => ReplayManager.IsReplayMode && SettingsManager.GetBool("accuratereplays");
+    private static readonly string[] cachedSettings = new string[]
+    {
+        "accuratereplays",
+        "simplenotes",
+        "simplebombs",
+        "rotateanimations",
+        "moveanimations",
+        "flipanimations",
+        "lookanimations",
+        "playerheight"
+    };
 
-    public bool useSimpleNoteMaterial => SettingsManager.GetBool("simplenotes");
-    public bool useSimpleBombMaterial => SettingsManager.GetBool("simplebombs");
-    public bool doRotationAnimation => forceGameAccuracy || SettingsManager.GetBool("rotateanimations");
-    public bool doMovementAnimation => forceGameAccuracy || SettingsManager.GetBool("moveanimations");
-    public bool doFlipAnimation => forceGameAccuracy || SettingsManager.GetBool("flipanimations");
+    public bool forceGameAccuracy { get; private set; }
 
-    public bool doLookAnimation => ReplayManager.IsReplayMode && (forceGameAccuracy || SettingsManager.GetBool("lookanimations"));
+    public bool useSimpleNoteMaterial { get; private set; }
+    public bool useSimpleBombMaterial { get; private set; }
+    public bool doRotationAnimation { get; private set; }
+    public bool doMovementAnimation { get; private set; }
+    public bool doFlipAnimation { get; private set; }
+
+    public bool doLookAnimation { get; private set; }
 
     public const float DefaultPlayerHeight = 1.8f;
-    public float PlayerHeightSetting => Mathf.Clamp(SettingsManager.GetFloat("playerheight"), 1.2f, 2.4f);
-    public float playerHeight => ReplayManager.IsReplayMode ? ReplayManager.PlayerHeight : PlayerHeightSetting;
-    public float playerHeightOffset => Mathf.Clamp((playerHeight - DefaultPlayerHeight) / 2, -0.2f, 0.6f);
+    public float PlayerHeightSetting { get; private set; } = 1.2f;
+    public float playerHeight { get; private set; } = 1.2f;
+    public float playerHeightOffset { get; private set; } = -0.2f;
 
     public static readonly Vector2 GridBottomLeft = new Vector2(-0.9f, 0);
     public const float LaneWidth = 0.6f;
@@ -95,6 +110,12 @@ public class ObjectManager : MonoBehaviour
 
     public static event Action OnObjectsLoaded;
 
+    private static int visualUpdateCoalescingDepth;
+    private static bool pendingCoalescedVisualUpdate;
+
+    private int mapStatsUpdateRequest;
+    private Coroutine mapStatsUpdateCoroutine;
+
 
     public Vector3 ObjectSpaceToWorldSpace(Vector3 pos)
     {
@@ -103,10 +124,73 @@ public class ObjectManager : MonoBehaviour
     }
 
 
+    private void UpdateCachedSettings(string setting)
+    {
+        if(setting != "all" && !cachedSettings.Contains(setting))
+        {
+            return;
+        }
+
+        if(SettingsManager.Loaded)
+        {
+            forceGameAccuracy = ReplayManager.IsReplayMode && SettingsManager.GetBool("accuratereplays");
+
+            useSimpleNoteMaterial = SettingsManager.GetBool("simplenotes");
+            useSimpleBombMaterial = SettingsManager.GetBool("simplebombs");
+            doRotationAnimation = forceGameAccuracy || SettingsManager.GetBool("rotateanimations");
+            doMovementAnimation = forceGameAccuracy || SettingsManager.GetBool("moveanimations");
+            doFlipAnimation = forceGameAccuracy || SettingsManager.GetBool("flipanimations");
+
+            doLookAnimation = ReplayManager.IsReplayMode && (forceGameAccuracy || SettingsManager.GetBool("lookanimations"));
+            PlayerHeightSetting = Mathf.Clamp(SettingsManager.GetFloat("playerheight"), 1.2f, 2.4f);
+        }
+
+        UpdatePlayerHeightCache();
+    }
+
+
+    private void UpdateReplayMode(bool replayMode)
+    {
+        UpdateCachedSettings("all");
+    }
+
+
+    private void UpdatePlayerHeightCache()
+    {
+        playerHeight = ReplayManager.IsReplayMode ? ReplayManager.PlayerHeight : PlayerHeightSetting;
+        playerHeightOffset = Mathf.Clamp((playerHeight - DefaultPlayerHeight) / 2, -0.2f, 0.6f);
+    }
+
+
+    public static void BeginMapSetVisualCoalescing()
+    {
+        visualUpdateCoalescingDepth++;
+    }
+
+
+    public static void EndMapSetVisualCoalescing()
+    {
+        if(visualUpdateCoalescingDepth <= 0)
+        {
+            visualUpdateCoalescingDepth = 0;
+            pendingCoalescedVisualUpdate = false;
+            return;
+        }
+
+        visualUpdateCoalescingDepth--;
+        if(visualUpdateCoalescingDepth > 0 || !pendingCoalescedVisualUpdate)
+        {
+            return;
+        }
+
+        pendingCoalescedVisualUpdate = false;
+        Instance?.UpdateBeat(TimeManager.CurrentBeat);
+    }
+
+
     public static bool CheckSameTime(float time1, float time2)
     {
-        const float epsilon = 0.001f;
-        return Mathf.Abs(time1 - time2) <= epsilon;
+        return Mathf.Abs(time1 - time2) <= SameTimeEpsilon;
     }
 
 
@@ -258,19 +342,81 @@ public class ObjectManager : MonoBehaviour
 
         if(UIStateManager.CurrentState == UIState.Previewer)
         {
-            MapStats.UpdateNpsAndSpsValues();
+            ScheduleMapStatsUpdate();
             OnObjectsLoaded?.Invoke();
+        }
+        else
+        {
+            CancelMapStatsUpdate();
         }
     }
 
 
     public void UpdateBeat(float currentBeat)
     {
+        UpdatePlayerHeightCache();
+
+        if(visualUpdateCoalescingDepth > 0)
+        {
+            pendingCoalescedVisualUpdate = true;
+            return;
+        }
+
+        UpdateObjectVisuals();
+    }
+
+
+    private void UpdateObjectVisuals()
+    {
         noteManager.UpdateVisuals();
         bombManager.UpdateVisuals();
         wallManager.UpdateVisuals();
         chainManager.UpdateVisuals();
         arcManager.UpdateVisuals();
+    }
+
+
+    private void ScheduleMapStatsUpdate()
+    {
+        mapStatsUpdateRequest++;
+        if(mapStatsUpdateCoroutine != null)
+        {
+            StopCoroutine(mapStatsUpdateCoroutine);
+        }
+
+        mapStatsUpdateCoroutine = StartCoroutine(UpdateMapStatsDeferred(mapStatsUpdateRequest));
+    }
+
+
+    private void CancelMapStatsUpdate()
+    {
+        mapStatsUpdateRequest++;
+        if(mapStatsUpdateCoroutine != null)
+        {
+            StopCoroutine(mapStatsUpdateCoroutine);
+            mapStatsUpdateCoroutine = null;
+        }
+    }
+
+
+    private IEnumerator UpdateMapStatsDeferred(int request)
+    {
+        for(int i = 0; i < DeferredLoadWorkFrames; i++)
+        {
+            yield return null;
+        }
+
+        if(request != mapStatsUpdateRequest || UIStateManager.CurrentState != UIState.Previewer)
+        {
+            if(request == mapStatsUpdateRequest)
+            {
+                mapStatsUpdateCoroutine = null;
+            }
+            yield break;
+        }
+
+        MapStats.UpdateNpsAndSpsValues();
+        mapStatsUpdateCoroutine = null;
     }
 
 
@@ -365,6 +511,130 @@ public class ObjectManager : MonoBehaviour
     }
 
 
+    private class ScoringEventBeatIndex
+    {
+        private readonly List<ScoringEvent>[] scoringEventsByGroup;
+
+
+        public ScoringEventBeatIndex(List<float> groupTimes)
+        {
+            scoringEventsByGroup = new List<ScoringEvent>[groupTimes.Count];
+
+            for(int i = 0; i < ScoreManager.ScoringEvents.Count; i++)
+            {
+                ScoringEvent scoringEvent = ScoreManager.ScoringEvents[i];
+                int firstGroup = FirstGroupAtOrAfter(groupTimes, scoringEvent.ObjectTime - SameTimeEpsilon);
+                if(firstGroup < 0)
+                {
+                    continue;
+                }
+
+                float maxTime = scoringEvent.ObjectTime + SameTimeEpsilon;
+                for(int groupIndex = firstGroup; groupIndex < groupTimes.Count && groupTimes[groupIndex] <= maxTime; groupIndex++)
+                {
+                    if(!CheckSameTime(groupTimes[groupIndex], scoringEvent.ObjectTime))
+                    {
+                        continue;
+                    }
+
+                    if(scoringEventsByGroup[groupIndex] == null)
+                    {
+                        scoringEventsByGroup[groupIndex] = new List<ScoringEvent>();
+                    }
+                    scoringEventsByGroup[groupIndex].Add(scoringEvent);
+                }
+            }
+        }
+
+
+        public List<ScoringEvent> EventsForGroup(int groupIndex)
+        {
+            if(scoringEventsByGroup[groupIndex] == null)
+            {
+                scoringEventsByGroup[groupIndex] = new List<ScoringEvent>();
+            }
+            return scoringEventsByGroup[groupIndex];
+        }
+
+
+        private static int FirstGroupAtOrAfter(List<float> groupTimes, float time)
+        {
+            int min = 0;
+            int max = groupTimes.Count - 1;
+            int result = -1;
+
+            while(min <= max)
+            {
+                int mid = min + ((max - min) / 2);
+                if(groupTimes[mid] >= time)
+                {
+                    result = mid;
+                    max = mid - 1;
+                }
+                else min = mid + 1;
+            }
+
+            return result;
+        }
+    }
+
+
+    private static List<float> GetObjectGroupTimes(List<BeatmapObject> allObjects)
+    {
+        List<float> groupTimes = new List<float>();
+        for(int i = 0; i < allObjects.Count; i++)
+        {
+            float currentTime = TimeManager.TimeFromBeat(allObjects[i].b);
+            groupTimes.Add(currentTime);
+
+            for(int x = i + 1; x < allObjects.Count; x++)
+            {
+                if(CheckSameTime(TimeManager.TimeFromBeat(allObjects[x].b), currentTime))
+                {
+                    i = x;
+                }
+                else break;
+            }
+        }
+
+        return groupTimes;
+    }
+
+
+    private static void AddObjectToBeatLists(
+        BeatmapObject mapObject,
+        List<BeatmapColorNote> notesOnBeat,
+        List<BeatmapBombNote> bombsOnBeat,
+        List<BeatmapBurstSlider> burstSlidersOnBeat,
+        List<BeatmapObstacle> obstaclesOnBeat,
+        List<BeatmapSliderEnd> sliderEndsOnBeat,
+        List<BeatmapObject> notesAndBombs)
+    {
+        if(mapObject is BeatmapColorNote colorNote)
+        {
+            notesOnBeat.Add(colorNote);
+            notesAndBombs.Add(colorNote);
+        }
+        else if(mapObject is BeatmapBombNote bombNote)
+        {
+            bombsOnBeat.Add(bombNote);
+            notesAndBombs.Add(bombNote);
+        }
+        else if(mapObject is BeatmapBurstSlider burstSlider)
+        {
+            burstSlidersOnBeat.Add(burstSlider);
+        }
+        else if(mapObject is BeatmapObstacle obstacle)
+        {
+            obstaclesOnBeat.Add(obstacle);
+        }
+        else if(mapObject is BeatmapSliderEnd sliderEnd)
+        {
+            sliderEndsOnBeat.Add(sliderEnd);
+        }
+    }
+
+
     public static void LoadMapObjects(BeatmapDifficulty beatmapDifficulty, out MapElementList<Note> notes, out MapElementList<Bomb> bombs, out MapElementList<Chain> chains, out MapElementList<Arc> arcs, out MapElementList<Wall> walls)
     {
         // split arcs into heads and tails for easier processing
@@ -434,14 +704,30 @@ public class ObjectManager : MonoBehaviour
         arcs = new MapElementList<Arc>();
         walls = new MapElementList<Wall>();
 
-        List<BeatmapObject> sameBeatObjects = new List<BeatmapObject>();
-        for(int i = 0; i < allObjects.Count; i++)
+        ScoringEventBeatIndex scoringEventIndex = ReplayManager.IsReplayMode
+            ? new ScoringEventBeatIndex(GetObjectGroupTimes(allObjects))
+            : null;
+
+        List<BeatmapColorNote> notesOnBeat = new List<BeatmapColorNote>();
+        List<BeatmapBombNote> bombsOnBeat = new List<BeatmapBombNote>();
+        List<BeatmapBurstSlider> burstSlidersOnBeat = new List<BeatmapBurstSlider>();
+        List<BeatmapObstacle> obstaclesOnBeat = new List<BeatmapObstacle>();
+        List<BeatmapSliderEnd> sliderEndsOnBeat = new List<BeatmapSliderEnd>();
+        List<BeatmapObject> notesAndBombs = new List<BeatmapObject>();
+
+        for(int i = 0, beatGroupIndex = 0; i < allObjects.Count; i++, beatGroupIndex++)
         {
             BeatmapObject current = allObjects[i];
             float currentTime = TimeManager.TimeFromBeat(current.b);
 
-            sameBeatObjects.Clear();
-            sameBeatObjects.Add(current);
+            notesOnBeat.Clear();
+            bombsOnBeat.Clear();
+            burstSlidersOnBeat.Clear();
+            obstaclesOnBeat.Clear();
+            sliderEndsOnBeat.Clear();
+            notesAndBombs.Clear();
+
+            AddObjectToBeatLists(current, notesOnBeat, bombsOnBeat, burstSlidersOnBeat, obstaclesOnBeat, sliderEndsOnBeat, notesAndBombs);
 
             for(int x = i + 1; x < allObjects.Count; x++)
             {
@@ -449,26 +735,18 @@ public class ObjectManager : MonoBehaviour
                 BeatmapObject check = allObjects[x];
                 if(CheckSameTime(TimeManager.TimeFromBeat(check.b), currentTime))
                 {
-                    sameBeatObjects.Add(check);
+                    AddObjectToBeatLists(check, notesOnBeat, bombsOnBeat, burstSlidersOnBeat, obstaclesOnBeat, sliderEndsOnBeat, notesAndBombs);
                     //Skip to the first object that doesn't share this beat next loop
                     i = x;
                 }
                 else break;
             }
 
-            List<BeatmapColorNote> notesOnBeat = sameBeatObjects.OfType<BeatmapColorNote>().ToList();
-            List<BeatmapBombNote> bombsOnBeat = sameBeatObjects.OfType<BeatmapBombNote>().ToList();
-            List<BeatmapBurstSlider> burstSlidersOnBeat = sameBeatObjects.OfType<BeatmapBurstSlider>().ToList();
-            List<BeatmapObstacle> obstaclesOnBeat = sameBeatObjects.OfType<BeatmapObstacle>().ToList();
-            List<BeatmapSliderEnd> sliderEndsOnBeat = sameBeatObjects.OfType<BeatmapSliderEnd>().ToList();
-
-            List<BeatmapObject> notesAndBombs = sameBeatObjects.Where(x => (x is BeatmapColorNote) || (x is BeatmapBombNote)).ToList();
-
             //Need to pair objects to their replay events if we're in a replay
             List<ScoringEvent> scoringEventsOnBeat = null;
             if(ReplayManager.IsReplayMode)
             {
-                scoringEventsOnBeat = ScoreManager.ScoringEvents.FindAll(x => CheckSameTime(x.ObjectTime, currentTime));
+                scoringEventsOnBeat = scoringEventIndex.EventsForGroup(beatGroupIndex);
 
                 if(ReplayManager.NoArrows)
                 {
@@ -752,6 +1030,15 @@ public class ObjectManager : MonoBehaviour
     }
 
 
+    private void OnEnable()
+    {
+        SettingsManager.OnSettingsUpdated += UpdateCachedSettings;
+        ReplayManager.OnReplayModeChanged += UpdateReplayMode;
+
+        UpdateCachedSettings("all");
+    }
+
+
     private void Start()
     {
         //Using this event instead of BeatmapManager.OnDifficultyChanged
@@ -761,15 +1048,22 @@ public class ObjectManager : MonoBehaviour
         TimeManager.OnPlayingChanged += RescheduleHitsounds;
 
         ColorManager.OnColorsChanged += (_) => UpdateColors();
+
+        PreviewerMaterialWarmup.RunOnce(this);
     }
 
 
     private void OnDisable()
     {
+        SettingsManager.OnSettingsUpdated -= UpdateCachedSettings;
+        ReplayManager.OnReplayModeChanged -= UpdateReplayMode;
+
         if(Instance == this)
         {
             Instance = null;
         }
+
+        CancelMapStatsUpdate();
     }
 }
 
@@ -822,6 +1116,8 @@ public abstract class MapElementManager<T> : MonoBehaviour where T : MapElement
     public MapElementList<T> CustomRTObjects = new MapElementList<T>();
     public List<T> RenderedObjects = new List<T>();
 
+    private MapElementList<T>.CheckInRangeDelegate visualInSpawnRange;
+
     public ObjectManager objectManager => ObjectManager.Instance;
     public JumpManager jumpManager => objectManager.jumpManager;
 
@@ -831,6 +1127,19 @@ public abstract class MapElementManager<T> : MonoBehaviour where T : MapElement
 
     public abstract void UpdateObjects(MapElementList<T> objects);
     public abstract float GetSpawnTime(T visual);
+
+
+    private MapElementList<T>.CheckInRangeDelegate VisualInSpawnRangeDelegate
+    {
+        get
+        {
+            if(visualInSpawnRange == null)
+            {
+                visualInSpawnRange = VisualInSpawnRange;
+            }
+            return visualInSpawnRange;
+        }
+    }
 
 
     public virtual void UpdateVisuals()
@@ -849,7 +1158,7 @@ public abstract class MapElementManager<T> : MonoBehaviour where T : MapElement
             if(!VisualInSpawnRange(visual))
             {
                 ReleaseVisual(visual);
-                RenderedObjects.Remove(visual);
+                RenderedObjects.RemoveAt(i);
             }
         }
     }
@@ -865,5 +1174,5 @@ public abstract class MapElementManager<T> : MonoBehaviour where T : MapElement
     }
 
 
-    public int GetStartIndex(float currentTime, MapElementList<T> objects) => objects.GetFirstIndex(currentTime, VisualInSpawnRange);
+    public int GetStartIndex(float currentTime, MapElementList<T> objects) => objects.GetFirstIndex(currentTime, VisualInSpawnRangeDelegate);
 }

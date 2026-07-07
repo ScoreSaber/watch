@@ -24,6 +24,10 @@
   <link rel="icon" href="TemplateData/favicon-32x32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="TemplateData/favicon-16x16.png" sizes="16x16" type="image/png" />
   <link rel="apple-touch-icon" href="TemplateData/apple-touch-icon.png" sizes="180x180" type="image/png" />
+  <link rel="preload" href="Build/{{{ FRAMEWORK_FILENAME }}}" as="script" />
+#if USE_WASM
+  <link rel="preload" href="Build/{{{ CODE_FILENAME }}}" as="fetch" crossorigin />
+#endif
   <link rel="stylesheet" href="TemplateData/style.css" />
 </head>
 
@@ -35,7 +39,238 @@
       <div id="unity-progress-bar-full"></div>
     </div>
   </div>
-  <script src="TemplateData/Scripts/oggdecode.js"></script>
+  <script>
+    const isSafari = navigator.userAgent.toLowerCase().indexOf('safari') !== -1 && navigator.userAgent.toLowerCase().indexOf('chrome') === -1;
+
+    if (isSafari) {
+      var oggDecodeScript = document.createElement("script");
+      oggDecodeScript.async = false;
+      oggDecodeScript.src = "TemplateData/Scripts/oggdecode.js";
+      document.head.appendChild(oggDecodeScript);
+    }
+  </script>
+  <script>
+    (function() {
+      if (typeof fetch === "undefined" || typeof URLSearchParams === "undefined") {
+        return;
+      }
+
+      var params = new URLSearchParams(window.location.search);
+      var scoreId = params.get("ssScoreId") || params.get("ssScoreID");
+      if (!scoreId) {
+        return;
+      }
+
+      var corsProxy = "https://cors.bsmg.dev/";
+      var defaultScoreSaberBaseUrl = "https://scoresaber.com/";
+      var beatSaverApiUrl = "https://api.beatsaver.com/";
+      var env = window.arcviewerEnv || window.__ARCVIEWER_ENV__ || {};
+      var envAliases = {
+        ARCVIEWER_SCORESABER_BASE_URL: "scoreSaberBaseUrl",
+        ARCVIEWER_SCORESABER_API_URL: "scoreSaberApiUrl"
+      };
+
+      function envValue(name) {
+        var value = env[name] || env[envAliases[name]] || "";
+        return String(value).trim() ? String(value) : "";
+      }
+
+      function trailingSlash(url) {
+        url = String(url || "");
+        return url.endsWith("/") ? url : url + "/";
+      }
+
+      function scoreSaberBaseUrl() {
+        return trailingSlash(envValue("ARCVIEWER_SCORESABER_BASE_URL") || defaultScoreSaberBaseUrl);
+      }
+
+      function scoreSaberApiUrl(baseUrl) {
+        var apiUrl = envValue("ARCVIEWER_SCORESABER_API_URL");
+        if (apiUrl) {
+          return trailingSlash(apiUrl);
+        }
+
+        return new URL("api/v2/", baseUrl).toString();
+      }
+
+      function startsWithIgnoreCase(value, prefix) {
+        return value.toLowerCase().indexOf(prefix.toLowerCase()) === 0;
+      }
+
+      function whitelistUrls(baseUrl, apiUrl) {
+        return [
+          "https://r2cdn.beatsaver.com",
+          "https://cdn.beatsaver.com",
+          "https://api.beatleader.xyz",
+          "https://cdn.replays.beatleader.xyz/",
+          "https://api.beatleader.com",
+          "https://cdn.replays.beatleader.com/",
+          "https://cdn.songs.beatleader.xyz/",
+          "https://cdn.songs.beatleader.com/",
+          "https://beatleader.com/",
+          "https://api.beatleader.com/",
+          baseUrl,
+          apiUrl,
+          "https://watch.scoresaber.com",
+          "https://cdn.scoresaber.com"
+        ];
+      }
+
+      function corsUrl(url, whitelist) {
+        for (var i = 0; i < whitelist.length; i++) {
+          if (whitelist[i] && startsWithIgnoreCase(url, whitelist[i])) {
+            return url;
+          }
+        }
+
+        return corsProxy + url;
+      }
+
+      function parseBoolean(value) {
+        return typeof value === "string" && value.toLowerCase() === "true";
+      }
+
+      function prefetchUrl(url) {
+        if (!url) {
+          return Promise.resolve(null);
+        }
+
+        window.__arcPrefetch = window.__arcPrefetch || {};
+        if (Object.prototype.hasOwnProperty.call(window.__arcPrefetch, url)) {
+          return window.__arcPrefetch[url];
+        }
+
+        var promise = fetch(url)
+          .then(function(response) {
+            return response && response.ok ? response.arrayBuffer() : null;
+          })
+          .catch(function() {
+            return null;
+          });
+
+        window.__arcPrefetch[url] = promise;
+        return promise;
+      }
+
+      function parseJsonBuffer(buffer) {
+        if (!buffer || typeof TextDecoder === "undefined") {
+          return null;
+        }
+
+        try {
+          return JSON.parse(new TextDecoder("utf-8").decode(buffer));
+        } catch (err) {
+          return null;
+        }
+      }
+
+      function fetchJson(url) {
+        return fetch(url)
+          .then(function(response) {
+            return response && response.ok ? response.json() : null;
+          })
+          .catch(function() {
+            return null;
+          });
+      }
+
+      function decodeUrl(value) {
+        try {
+          return decodeURIComponent(String(value || "").replace(/\+/g, " "));
+        } catch (err) {
+          return "";
+        }
+      }
+
+      function downloadUrl(url, noProxy, whitelist) {
+        return noProxy ? url : corsUrl(url, whitelist);
+      }
+
+      function prefetchBeatSaverId(mapId, noProxy, whitelist) {
+        fetchJson(beatSaverApiUrl + "maps/id/" + mapId).then(function(response) {
+          if (!response || !response.versions || response.versions.length === 0) {
+            return;
+          }
+
+          var url = decodeUrl(response.versions[0].downloadURL);
+          if (url) {
+            prefetchUrl(downloadUrl(url, noProxy, whitelist));
+          }
+        });
+      }
+
+      function prefetchBeatSaverHash(hash, noProxy, whitelist) {
+        fetchJson(beatSaverApiUrl + "maps/hash/" + hash).then(function(response) {
+          if (!response || !response.versions || response.versions.length === 0) {
+            return;
+          }
+
+          var hashText = String(hash);
+          var url = "";
+          for (var i = 0; i < response.versions.length; i++) {
+            var version = response.versions[i];
+            if (version && String(version.hash).toLowerCase() === hashText.toLowerCase()) {
+              url = version.downloadURL;
+              break;
+            }
+          }
+
+          url = url ? decodeUrl(url) : "https://r2cdn.beatsaver.com/" + hashText.toLowerCase() + ".zip";
+          if (url) {
+            prefetchUrl(downloadUrl(url, noProxy, whitelist));
+          }
+        });
+      }
+
+      function prefetchMap(score, noProxy, whitelist) {
+        var mapUrl = params.get("url") || "";
+        var mapId = params.get("id") || "";
+        if (mapUrl && mapId) {
+          mapUrl = "";
+        }
+
+        if (mapUrl) {
+          prefetchUrl(downloadUrl(mapUrl, noProxy, whitelist));
+          return;
+        }
+
+        var map = score && score.leaderboard && score.leaderboard.map;
+        mapId = mapId || (map && map.bsid) || "";
+        if (mapId) {
+          prefetchBeatSaverId(mapId, noProxy, whitelist);
+          return;
+        }
+
+        var hash = (map && map.hash) || "";
+        if (hash) {
+          prefetchBeatSaverHash(hash, noProxy, whitelist);
+        }
+      }
+
+      try {
+        var baseUrl = scoreSaberBaseUrl();
+        var apiUrl = scoreSaberApiUrl(baseUrl);
+        var whitelist = whitelistUrls(baseUrl, apiUrl);
+        var noProxy = parseBoolean(params.get("noProxy"));
+        var encodedScoreId = encodeURIComponent(scoreId);
+        var scoreUrl = corsUrl(apiUrl + "scores/" + encodedScoreId + "?includeScoreStats=false", whitelist);
+        var replayUrl = downloadUrl(apiUrl + "scores/" + encodedScoreId + "/replay", noProxy, whitelist);
+        var scorePromise = prefetchUrl(scoreUrl);
+
+        prefetchUrl(replayUrl);
+        scorePromise.then(function(buffer) {
+          var score = parseJsonBuffer(buffer);
+          if (!score) {
+            return;
+          }
+
+          var resolvedScoreId = score.score && score.score.id > 0 ? String(score.score.id) : scoreId;
+          prefetchUrl(downloadUrl(apiUrl + "scores/" + encodeURIComponent(resolvedScoreId) + "/replay", noProxy, whitelist));
+          prefetchMap(score, noProxy, whitelist);
+        });
+      } catch (err) {}
+    })();
+  </script>
   <script src="Build/{{{ LOADER_FILENAME }}}"></script>
   <script>
     if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
@@ -55,6 +290,34 @@
 
     document.querySelector("#unity-loading-bar").style.display = "block";
 
+    function SkipDeprecatedFirefoxRendererInfo() {
+      if (!/\bFirefox\//.test(navigator.userAgent)) return;
+
+      var patchedContexts = [];
+
+      function patchContext(contextType) {
+        if (!contextType) return;
+        if (patchedContexts.indexOf(contextType.prototype) !== -1) return;
+
+        var getExtension = contextType.prototype.getExtension;
+        if (!getExtension) return;
+
+        function patchedGetExtension(name) {
+          if (name === "WEBGL_debug_renderer_info") return null;
+
+          return getExtension.apply(this, arguments);
+        }
+
+        contextType.prototype.getExtension = patchedGetExtension;
+        patchedContexts.push(contextType.prototype);
+      }
+
+      patchContext(window.WebGLRenderingContext);
+      patchContext(window.WebGL2RenderingContext);
+    }
+
+    SkipDeprecatedFirefoxRendererInfo();
+
     var gameInstance = null;
     createUnityInstance(document.querySelector("#unity-canvas"), {
       dataUrl: "Build/{{{ DATA_FILENAME }}}",
@@ -72,6 +335,7 @@
       companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
       productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
       productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+      autoSyncPersistentDataPath: true,
         // matchWebGLToCanvasSize: false, // Uncomment this to separately control WebGL canvas render size and DOM element size.
         // devicePixelRatio: 1, // Uncomment this to override low DPI rendering on high DPI displays.
       }, (progress) => {
@@ -84,8 +348,6 @@
       });
   </script>
   <script>
-    const isSafari = navigator.userAgent.toLowerCase().indexOf('safari') !== -1 && navigator.userAgent.toLowerCase().indexOf('chrome') === -1;
-
     function ToggleFullscreen() {
       if(!document.fullscreenEnabled) return;
 

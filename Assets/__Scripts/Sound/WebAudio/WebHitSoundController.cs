@@ -31,20 +31,29 @@ public class WebHitSoundController : MonoBehaviour
     public static extern void DisposeHitSound(int id);
 
     [DllImport("__Internal")]
-    public static extern int AddHitSound(int id, bool badCut, bool chainLink, float playTime, float pitch);
-
-    [DllImport("__Internal")]
-    public static extern float GetHitSoundTime(int id);
-
-    [DllImport("__Internal")]
-    public static extern bool IsHitSoundBadCut(int id);
+    public static extern void AddHitSound(int id, bool badCut, bool chainLink, float playTime, float pitch);
 
     public static float CurrentHitSoundVolume;
     public static float CurrentChainSoundVolume;
 
     private static WebHitSoundController instance;
     private static HashSet<int> soundIDs = new HashSet<int>();
+    private static Dictionary<int, HitSoundMetadata> soundMetadata = new Dictionary<int, HitSoundMetadata>();
     private static int lowestOpenID = 0;
+
+
+    private struct HitSoundMetadata
+    {
+        public float time;
+        public bool badCut;
+
+
+        public HitSoundMetadata(float time, bool badCut)
+        {
+            this.time = time;
+            this.badCut = badCut;
+        }
+    }
 
 
     public static void Init()
@@ -78,9 +87,9 @@ public class WebHitSoundController : MonoBehaviour
 
     public static void CreateHitSound(bool badCut, bool chainLink, float playTime, float pitch)
     {
-        foreach(int id in soundIDs)
+        foreach(HitSoundMetadata metadata in soundMetadata.Values)
         {
-            if(ObjectManager.CheckSameTime(GetHitSoundTime(id), playTime) && IsHitSoundBadCut(id) == badCut)
+            if(ObjectManager.CheckSameTime(metadata.time, playTime) && metadata.badCut == badCut)
             {
                 //Don't schedule stacked hitsounds
                 return;
@@ -90,9 +99,10 @@ public class WebHitSoundController : MonoBehaviour
         int newID = lowestOpenID;
 
         AddHitSound(newID, badCut, chainLink, playTime, pitch);
-        ScheduleHitSound(newID, SongManager.GetSongTime(), TimeSyncHandler.TimeScale);
-
         soundIDs.Add(newID);
+        soundMetadata.Add(newID, new HitSoundMetadata(playTime, badCut));
+
+        ScheduleHitSound(newID, SongManager.GetSongTime(), TimeSyncHandler.TimeScale);
         lowestOpenID = GetNextOpenID();
     }
 
@@ -118,6 +128,7 @@ public class WebHitSoundController : MonoBehaviour
         }
 
         soundIDs.Clear();
+        soundMetadata.Clear();
         lowestOpenID = 0;
     }
 
@@ -126,6 +137,7 @@ public class WebHitSoundController : MonoBehaviour
     {
         DisposeHitSound(id);
         soundIDs.Remove(id);
+        soundMetadata.Remove(id);
         if(id < lowestOpenID)
         {
             lowestOpenID = id;

@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 using ArcViewer.LZMA;
 
 public static class ScoreSaberDecoder
 {
+    private const int ParseYieldSliceBytes = 256 * 1024;
     public static bool IsScoreSaberReplay(byte[] data) =>
         data != null && ScoreSaberUtils.HasMagicHeader(data, data.Length);
 
@@ -31,6 +33,11 @@ public static class ScoreSaberDecoder
     public static Replay Decode(byte[] input)
     {
         if(!IsScoreSaberReplay(input)) return null;
+        return DecodeKnownScoreSaberReplay(input);
+    }
+
+    internal static Replay DecodeKnownScoreSaberReplay(byte[] input)
+    {
         try
         {
             return DecodeInternal(input);
@@ -42,11 +49,28 @@ public static class ScoreSaberDecoder
         }
     }
 
+    public static async Task<Replay> DecodeAsync(byte[] input)
+    {
+        if(!IsScoreSaberReplay(input)) return null;
+        return await DecodeKnownScoreSaberReplayAsync(input);
+    }
+
+    internal static async Task<Replay> DecodeKnownScoreSaberReplayAsync(byte[] input)
+    {
+        try
+        {
+            return await DecodeInternalAsync(input);
+        }
+        catch(Exception e)
+        {
+            Debug.LogWarning($"Failed to decode ScoreSaber replay: {e.Message}\n{e.StackTrace}");
+            return null;
+        }
+    }
+
     private static Replay DecodeInternal(byte[] input)
     {
-        byte[] compressed = new byte[input.Length - ScoreSaberUtils.MagicLength];
-        Array.Copy(input, ScoreSaberUtils.MagicLength, compressed, 0, compressed.Length);
-        byte[] data = LzmaHelper.Decompress(compressed);
+        byte[] data = LzmaHelper.Decompress(input, ScoreSaberUtils.MagicLength, input.Length - ScoreSaberUtils.MagicLength);
 
         int offset = 0;
         int metadataPtr = ScoreSaberUtils.ReadInt(data, ref offset);
@@ -80,6 +104,56 @@ public static class ScoreSaberDecoder
             walls = new List<WallEvent>(),
             pauses = new List<Pause>()
         };
+    }
+
+    private static async Task<Replay> DecodeInternalAsync(byte[] input)
+    {
+        byte[] data = await LzmaHelper.DecompressAsync(input, ScoreSaberUtils.MagicLength, input.Length - ScoreSaberUtils.MagicLength);
+
+        int offset = 0;
+        int metadataPtr = ScoreSaberUtils.ReadInt(data, ref offset);
+        int posePtr = ScoreSaberUtils.ReadInt(data, ref offset);
+        int heightPtr = ScoreSaberUtils.ReadInt(data, ref offset);
+        int notePtr = ScoreSaberUtils.ReadInt(data, ref offset);
+        int scorePtr = ScoreSaberUtils.ReadInt(data, ref offset);
+        offset += 12; // comboPtr, multiplierPtr, energyPtr
+        int extensionPtr = ScoreSaberUtils.ReadInt(data, ref offset);
+
+        (ReplayInfo info, string version) = ReadMetadata(data, ref metadataPtr);
+        bool isV3 = ScoreSaberUtils.VersionAtLeast(version, 3, 0, 0);
+
+        var frameResult = await ReadFramesAsync(data, posePtr);
+        List<Frame> frames = frameResult.frames;
+        List<AutomaticHeight> heights = ReadHeightEvents(data, ref heightPtr);
+
+        int noteCount = ScoreSaberUtils.ReadInt(data, ref notePtr);
+        int nextYieldOffset = notePtr + ParseYieldSliceBytes;
+        List<NoteEvent> notes = new List<NoteEvent>(noteCount);
+        for(int i = 0; i < noteCount; i++)
+        {
+            notes.Add(ReadNoteEvent(data, ref notePtr, isV3));
+            if(notePtr >= nextYieldOffset)
+            {
+                await Task.Yield();
+                nextYieldOffset = notePtr + ParseYieldSliceBytes;
+            }
+        }
+
+        info.score = ReadFinalScore(data, ref scorePtr, isV3);
+
+        Debug.Log($"ScoreSaber replay decoded: {notes.Count} notes, {frames.Count} frames, score={info.score}");
+
+        Replay replay = new Replay
+        {
+            info = info,
+            frames = frames,
+            notes = notes,
+            heights = heights,
+            walls = new List<WallEvent>(),
+            pauses = new List<Pause>()
+        };
+        ReadExtensions(data, extensionPtr, replay);
+        return replay;
     }
 
     private static (ReplayInfo info, string version) ReadMetadata(byte[] data, ref int offset)
@@ -151,6 +225,34 @@ public static class ScoreSaberDecoder
                 frames.Add(frame);
         }
         return frames;
+    }
+
+    private static async Task<(List<Frame> frames, int offset)> ReadFramesAsync(byte[] data, int offset)
+    {
+        int count = ScoreSaberUtils.ReadInt(data, ref offset);
+        int nextYieldOffset = offset + ParseYieldSliceBytes;
+        List<Frame> frames = new List<Frame>(count);
+        for(int i = 0; i < count; i++)
+        {
+            Frame frame = new Frame
+            {
+                head = ScoreSaberUtils.ReadPositionData(data, ref offset),
+                leftHand = ScoreSaberUtils.ReadPositionData(data, ref offset),
+                rightHand = ScoreSaberUtils.ReadPositionData(data, ref offset),
+                fps = ScoreSaberUtils.ReadInt(data, ref offset),
+                time = ScoreSaberUtils.ReadFloat(data, ref offset)
+            };
+
+            if(frame.time != 0 && (frames.Count == 0 || frame.time != frames[frames.Count - 1].time))
+                frames.Add(frame);
+
+            if(offset >= nextYieldOffset)
+            {
+                await Task.Yield();
+                nextYieldOffset = offset + ParseYieldSliceBytes;
+            }
+        }
+        return (frames, offset);
     }
 
     private static NoteEvent ReadNoteEvent(byte[] data, ref int offset, bool v3)

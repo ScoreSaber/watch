@@ -1,15 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Unity.VisualScripting;
 using UnityEngine;
 
 public class LightManager : MonoBehaviour
 {
     private static bool _staticLights;
+    private static bool staticLightsSetting;
+    private static bool staticLightsWhileScrubbing;
+    private static bool chromaLightColors;
+
     public static bool StaticLights
     {
-        get => _staticLights || Scrubbing || EnvironmentManager.CurrentSceneIndex < 0 || EnvironmentManager.Loading || SettingsManager.GetBool("staticlights", false);
+        get => _staticLights || Scrubbing || EnvironmentManager.CurrentSceneIndex < 0 || EnvironmentManager.Loading || staticLightsSetting;
         set
         {
             _staticLights = value;
@@ -17,7 +20,7 @@ public class LightManager : MonoBehaviour
         }
     }
 
-    private static bool Scrubbing => TimeManager.Scrubbing && SettingsManager.GetBool("staticlightswhilescrubbing", false);
+    private static bool Scrubbing => TimeManager.Scrubbing && staticLightsWhileScrubbing;
 
     private static bool _boostActive;
     public static bool BoostActive
@@ -31,11 +34,13 @@ public class LightManager : MonoBehaviour
 
     public static bool FlipBackLasers { get; private set; }
 
-    public static event Action<LightingPropertyEventArgs> OnLightPropertiesChanged;
     public static event Action<LaserSpeedEvent, LightEventType> OnLaserRotationsChanged;
     public static event Action OnStaticLightsChanged;
 
     public const float FlashIntensity = 1.2f;
+
+    private const int lightPropertyEventTypeCount = 5;
+    private static readonly Action<LightingPropertyEventArgs>[] lightPropertyChangedSubscribers = new Action<LightingPropertyEventArgs>[lightPropertyEventTypeCount];
 
     private static float lightGlowBrightness = 1f;
 
@@ -47,6 +52,7 @@ public class LightManager : MonoBehaviour
     private static readonly string[] lightSettings = new string[]
     {
         "staticlights",
+        "staticlightswhilescrubbing",
         "lightglowbrightness",
         "chromalightcolors",
         "staticbacklasers",
@@ -64,6 +70,9 @@ public class LightManager : MonoBehaviour
     };
 
     private static MapElementList<BoostEvent> boostEvents = new MapElementList<BoostEvent>();
+    private static readonly MapElementList<BoostEvent>.CheckInRangeDelegate boostEventInRange = BoostEventInRange;
+    private static readonly MapElementList<LightEvent>.CheckInRangeDelegate lightEventInRange = LightEventInRange;
+    private static readonly MapElementList<LaserSpeedEvent>.CheckInRangeDelegate laserSpeedEventInRange = LaserSpeedEventInRange;
 
     public MapElementList<LightEvent> backLaserEvents = new MapElementList<LightEvent>();
     public MapElementList<LightEvent> ringEvents = new MapElementList<LightEvent>();
@@ -76,6 +85,70 @@ public class LightManager : MonoBehaviour
 
     [SerializeField] private float lightEmission;
 
+    private readonly LightingPropertyEventArgs[] lightPropertyEventArgs =
+    {
+        new LightingPropertyEventArgs { type = LightEventType.BackLasers },
+        new LightingPropertyEventArgs { type = LightEventType.Rings },
+        new LightingPropertyEventArgs { type = LightEventType.LeftRotatingLasers },
+        new LightingPropertyEventArgs { type = LightEventType.RightRotatingLasers },
+        new LightingPropertyEventArgs { type = LightEventType.CenterLights }
+    };
+
+
+    public static event Action<LightingPropertyEventArgs> OnLightPropertiesChanged
+    {
+        add
+        {
+            if(value?.Target is LightHandler lightHandler)
+            {
+                SubscribeLightPropertiesChanged(lightHandler.type, value);
+                return;
+            }
+
+            for(int i = 0; i < lightPropertyEventTypeCount; i++)
+            {
+                lightPropertyChangedSubscribers[i] += value;
+            }
+        }
+        remove
+        {
+            if(value?.Target is LightHandler lightHandler)
+            {
+                UnsubscribeLightPropertiesChanged(lightHandler.type, value);
+                return;
+            }
+
+            for(int i = 0; i < lightPropertyEventTypeCount; i++)
+            {
+                lightPropertyChangedSubscribers[i] -= value;
+            }
+        }
+    }
+
+
+    public static void SubscribeLightPropertiesChanged(LightEventType type, Action<LightingPropertyEventArgs> subscriber)
+    {
+        int index = (int)type;
+        if(index < 0 || index >= lightPropertyEventTypeCount)
+        {
+            return;
+        }
+
+        lightPropertyChangedSubscribers[index] += subscriber;
+    }
+
+
+    public static void UnsubscribeLightPropertiesChanged(LightEventType type, Action<LightingPropertyEventArgs> subscriber)
+    {
+        int index = (int)type;
+        if(index < 0 || index >= lightPropertyEventTypeCount)
+        {
+            return;
+        }
+
+        lightPropertyChangedSubscribers[index] -= subscriber;
+    }
+
 
     public void UpdateLights(float beat)
     {
@@ -84,7 +157,7 @@ public class LightManager : MonoBehaviour
             return;
         }
 
-        int lastBoostEvent = boostEvents.GetLastIndex(TimeManager.CurrentTime, x => x.Beat <= beat);
+        int lastBoostEvent = boostEvents.GetLastIndex(TimeManager.CurrentTime, boostEventInRange);
         BoostActive = lastBoostEvent >= 0 ? boostEvents[lastBoostEvent].Value : false;
 
         RingManager.UpdateRings();
@@ -102,7 +175,7 @@ public class LightManager : MonoBehaviour
 
     private void UpdateLightEventType(LightEventType type, MapElementList<LightEvent> events)
     {
-        int lastIndex = events.GetLastIndex(TimeManager.CurrentTime, x => x.Time <= TimeManager.CurrentTime);
+        int lastIndex = events.GetLastIndex(TimeManager.CurrentTime, lightEventInRange);
         bool foundEvent = lastIndex >= 0;
 
         LightEvent currentEvent = foundEvent ? events[lastIndex] : null;
@@ -118,30 +191,37 @@ public class LightManager : MonoBehaviour
     {
         Color eventColor = GetEventColor(lightEvent, nextEvent);
 
-        LightingPropertyEventArgs eventArgs = new LightingPropertyEventArgs
-        {
-            sender = this,
-            eventList = events,
-            lightEvent = lightEvent,
-            nextEvent = nextEvent,
-            type = type,
-            eventIndex = eventIndex,
-            eventColor = eventColor,
-            laserColor = GetLaserColor(eventColor),
-            glowColor = GetLaserGlowColor(eventColor)
-        };
-        OnLightPropertiesChanged?.Invoke(eventArgs);
+        LightingPropertyEventArgs eventArgs = lightPropertyEventArgs[(int)type];
+        eventArgs.sender = this;
+        eventArgs.eventList = events;
+        eventArgs.lightEvent = lightEvent;
+        eventArgs.nextEvent = nextEvent;
+        eventArgs.type = type;
+        eventArgs.eventIndex = eventIndex;
+        eventArgs.eventColor = eventColor;
+        eventArgs.laserColor = GetLaserColor(eventColor);
+        eventArgs.glowColor = GetLaserGlowColor(eventColor);
+        lightPropertyChangedSubscribers[(int)type]?.Invoke(eventArgs);
     }
 
 
     private void UpdateLaserSpeedEventType(LightEventType type, MapElementList<LaserSpeedEvent> events)
     {
-        int lastIndex = events.GetLastIndex(TimeManager.CurrentTime, x => x.Time <= TimeManager.CurrentTime);
+        int lastIndex = events.GetLastIndex(TimeManager.CurrentTime, laserSpeedEventInRange);
         bool foundEvent = lastIndex >= 0;
 
         LaserSpeedEvent lastEvent = foundEvent ? events[lastIndex] : null;
         OnLaserRotationsChanged?.Invoke(lastEvent, type);
     }
+
+
+    private static bool BoostEventInRange(BoostEvent boostEvent) => boostEvent.Beat <= TimeManager.CurrentBeat;
+
+
+    private static bool LightEventInRange(LightEvent lightEvent) => lightEvent.Time <= TimeManager.CurrentTime;
+
+
+    private static bool LaserSpeedEventInRange(LaserSpeedEvent laserSpeedEvent) => laserSpeedEvent.Time <= TimeManager.CurrentTime;
 
 
     public Color GetLaserColor(Color baseColor)
@@ -195,7 +275,7 @@ public class LightManager : MonoBehaviour
     private static Color GetEventBaseColor(LightEvent lightEvent)
     {
         Color baseColor;
-        if(lightEvent.CustomColorIdx != null && SettingsManager.GetBool("chromalightcolors"))
+        if(lightEvent.CustomColorIdx != null && chromaLightColors)
         {
             baseColor = LightColorManager.GetColor(lightEvent.CustomColorIdx);
         }
@@ -362,12 +442,27 @@ public class LightManager : MonoBehaviour
 
     public void UpdateLightParameters()
     {
-        lightGlowBrightness = Mathf.Clamp(SettingsManager.GetFloat("lightglowbrightness"), 0f, 2f);
+        UpdateCachedSettings();
+
         if(StaticLights)
         {
             SetStaticLayout();
         }
         else UpdateLights(TimeManager.CurrentBeat);
+    }
+
+
+    private static void UpdateCachedSettings()
+    {
+        if(!SettingsManager.Loaded)
+        {
+            return;
+        }
+
+        staticLightsSetting = SettingsManager.GetBool("staticlights", false);
+        staticLightsWhileScrubbing = SettingsManager.GetBool("staticlightswhilescrubbing", false);
+        chromaLightColors = SettingsManager.GetBool("chromalightcolors");
+        lightGlowBrightness = Mathf.Clamp(SettingsManager.GetFloat("lightglowbrightness"), 0f, 2f);
     }
 
 

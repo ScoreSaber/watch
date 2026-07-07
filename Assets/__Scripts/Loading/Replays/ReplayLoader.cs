@@ -16,7 +16,7 @@ public class ReplayLoader
         try
         {
             byte[] replayData = await File.ReadAllBytesAsync(directory);
-            return DecodeReplayBytes(replayData);
+            return await DecodeReplayBytesAsync(replayData);
         }
         catch(Exception err)
         {
@@ -40,7 +40,35 @@ public class ReplayLoader
         if(ScoreSaberDecoder.IsScoreSaberReplay(data))
         {
             Debug.Log("Detected ScoreSaber replay format.");
-            return ScoreSaberDecoder.Decode(data);
+            return ScoreSaberDecoder.DecodeKnownScoreSaberReplay(data);
+        }
+
+        // scoresaber legacy format
+        if(ScoreSaberDecoder.IsLegacyScoreSaberReplay(data))
+        {
+            Debug.Log("Detected ScoreSaber legacy replay format.");
+            Replay legacy = ScoreSaberLegacyDecoder.Decode(data);
+            if(legacy != null) return legacy;
+        }
+
+        // fall back to BsorV1
+        return BsorDecoder.Decode(data);
+    }
+
+
+    private static async Task<Replay> DecodeReplayBytesAsync(byte[] data)
+    {
+        if(BsorDecoder.IsBsorV1Replay(data))
+        {
+            Debug.Log("Detected BsorV1 replay format.");
+            return BsorDecoder.Decode(data);
+        }
+
+        // scoresaber replay (magic header check)
+        if(ScoreSaberDecoder.IsScoreSaberReplay(data))
+        {
+            Debug.Log("Detected ScoreSaber replay format.");
+            return await ScoreSaberDecoder.DecodeKnownScoreSaberReplayAsync(data);
         }
 
         // scoresaber legacy format
@@ -58,11 +86,9 @@ public class ReplayLoader
 
     public static async Task<Replay> ReplayFromStream(Stream replayStream)
     {
-        using MemoryStream ms = new MemoryStream();
-        await replayStream.CopyToAsync(ms);
-        byte[] data = ms.ToArray();
+        byte[] data = await ReadReplayStreamBytes(replayStream);
 
-        Replay replay = DecodeReplayBytes(data);
+        Replay replay = await DecodeReplayBytesAsync(data);
         if(replay != null)
         {
             if(replayStream.CanSeek)
@@ -95,6 +121,47 @@ public class ReplayLoader
         }
 
         return decodedReplay;
+    }
+
+
+    private static async Task<byte[]> ReadReplayStreamBytes(Stream replayStream)
+    {
+        if(replayStream is MemoryStream memoryStream && memoryStream.Position == 0 &&
+            memoryStream.TryGetBuffer(out ArraySegment<byte> buffer) &&
+            buffer.Offset == 0 && buffer.Count == buffer.Array.Length)
+        {
+            memoryStream.Seek(0, SeekOrigin.End);
+            return buffer.Array;
+        }
+
+        if(replayStream.CanSeek)
+        {
+            long remaining = Math.Max(0, replayStream.Length - replayStream.Position);
+            if(remaining <= int.MaxValue)
+            {
+                byte[] data = new byte[(int)remaining];
+                int bytesRead = 0;
+                while(bytesRead < data.Length)
+                {
+                    int read = await replayStream.ReadAsync(data, bytesRead, data.Length - bytesRead);
+                    if(read == 0) break;
+                    bytesRead += read;
+                }
+
+                if(bytesRead == data.Length)
+                {
+                    return data;
+                }
+
+                byte[] resizedData = new byte[bytesRead];
+                Array.Copy(data, resizedData, bytesRead);
+                return resizedData;
+            }
+        }
+
+        using MemoryStream ms = new MemoryStream();
+        await replayStream.CopyToAsync(ms);
+        return ms.ToArray();
     }
 
 

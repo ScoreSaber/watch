@@ -5,6 +5,7 @@ using UnityEngine.Audio;
 public class SongManager : MonoBehaviour
 {
     public static SongManager Instance { get; private set; }
+    public static bool HasSong => Instance != null && Instance.MusicClip != null;
 
 #if !UNITY_WEBGL || UNITY_EDITOR
     private AudioClip _musicClip;

@@ -6,6 +6,15 @@ public class ObjectPool : MonoBehaviour
     public List<GameObject> AvailableObjects = new List<GameObject>();
     public List<GameObject> ActiveObjects = new List<GameObject>();
 
+    private readonly Queue<GameObject> availableObjectQueue = new Queue<GameObject>();
+    private readonly Dictionary<GameObject, int> availableObjectCounts = new Dictionary<GameObject, int>();
+    private readonly Dictionary<GameObject, int> availableObjectIndices = new Dictionary<GameObject, int>();
+    private readonly Dictionary<GameObject, int> activeObjectCounts = new Dictionary<GameObject, int>();
+    private readonly Dictionary<GameObject, int> activeObjectIndices = new Dictionary<GameObject, int>();
+
+    private int knownAvailableCount = -1;
+    private int knownActiveCount = -1;
+
     public int PoolSize { get; private set; }
 
     [SerializeField] private GameObject prefab;
@@ -22,6 +31,8 @@ public class ObjectPool : MonoBehaviour
 
     private void AttemptMatchPoolSize()
     {
+        EnsureTrackingCurrent();
+
         int actualSize = AvailableObjects.Count + ActiveObjects.Count;
         int difference = actualSize - PoolSize;
         if(actualSize > PoolSize)
@@ -35,9 +46,9 @@ public class ObjectPool : MonoBehaviour
                     //Enough objects have been deleted
                     break;
                 }
-                
-                Destroy(AvailableObjects[i]);
-                AvailableObjects.RemoveAt(i);
+
+                GameObject deletedObject = RemoveAvailableObjectAt(i);
+                Destroy(deletedObject);
                 deleted++;
             }
         }
@@ -47,7 +58,7 @@ public class ObjectPool : MonoBehaviour
             for(int i = 0; i < Mathf.Abs(difference); i++)
             {
                 GameObject newObject = CreateNewObject();
-                AvailableObjects.Add(newObject);
+                AddAvailableObject(newObject);
             }
         }
     }
@@ -65,16 +76,209 @@ public class ObjectPool : MonoBehaviour
         return newObject;
     }
 
+    private void EnsureTrackingCurrent()
+    {
+        if(knownAvailableCount == AvailableObjects.Count && knownActiveCount == ActiveObjects.Count)
+        {
+            return;
+        }
+
+        RebuildTracking();
+    }
+
+
+    private void RebuildTracking()
+    {
+        availableObjectQueue.Clear();
+        availableObjectCounts.Clear();
+        availableObjectIndices.Clear();
+        activeObjectCounts.Clear();
+        activeObjectIndices.Clear();
+
+        for(int i = 0; i < AvailableObjects.Count; i++)
+        {
+            GameObject availableObject = AvailableObjects[i];
+            AddTrackedObject(availableObjectCounts, availableObject);
+            availableObjectIndices[availableObject] = i;
+            availableObjectQueue.Enqueue(availableObject);
+        }
+
+        for(int i = 0; i < ActiveObjects.Count; i++)
+        {
+            GameObject activeObject = ActiveObjects[i];
+            AddTrackedObject(activeObjectCounts, activeObject);
+            activeObjectIndices[activeObject] = i;
+        }
+
+        RememberListCounts();
+    }
+
+
+    private void RememberListCounts()
+    {
+        knownAvailableCount = AvailableObjects.Count;
+        knownActiveCount = ActiveObjects.Count;
+    }
+
+
+    private static void AddTrackedObject(Dictionary<GameObject, int> objectCounts, GameObject gameObject)
+    {
+        int count;
+        objectCounts.TryGetValue(gameObject, out count);
+        objectCounts[gameObject] = count + 1;
+    }
+
+
+    private static int RemoveTrackedObject(Dictionary<GameObject, int> objectCounts, GameObject gameObject)
+    {
+        int count = objectCounts[gameObject] - 1;
+        if(count <= 0)
+        {
+            objectCounts.Remove(gameObject);
+            return 0;
+        }
+
+        objectCounts[gameObject] = count;
+        return count;
+    }
+
+
+    private void AddAvailableObject(GameObject gameObject)
+    {
+        availableObjectIndices[gameObject] = AvailableObjects.Count;
+        AvailableObjects.Add(gameObject);
+        availableObjectQueue.Enqueue(gameObject);
+        AddTrackedObject(availableObjectCounts, gameObject);
+        RememberListCounts();
+    }
+
+
+    private GameObject TakeAvailableObject()
+    {
+        while(availableObjectQueue.Count > 0)
+        {
+            GameObject gameObject = availableObjectQueue.Dequeue();
+            if(availableObjectCounts.ContainsKey(gameObject))
+            {
+                RemoveAvailableObject(gameObject);
+                return gameObject;
+            }
+        }
+
+        GameObject fallbackObject = AvailableObjects[0];
+        RemoveAvailableObjectAt(0);
+        return fallbackObject;
+    }
+
+
+    private void RemoveAvailableObject(GameObject gameObject)
+    {
+        RemoveAvailableObjectAt(availableObjectIndices[gameObject]);
+    }
+
+
+    private GameObject RemoveAvailableObjectAt(int index)
+    {
+        GameObject gameObject = AvailableObjects[index];
+        int lastIndex = AvailableObjects.Count - 1;
+
+        if(index != lastIndex)
+        {
+            GameObject lastObject = AvailableObjects[lastIndex];
+            AvailableObjects[index] = lastObject;
+            availableObjectIndices[lastObject] = index;
+        }
+
+        AvailableObjects.RemoveAt(lastIndex);
+
+        if(RemoveTrackedObject(availableObjectCounts, gameObject) == 0)
+        {
+            availableObjectIndices.Remove(gameObject);
+        }
+        else
+        {
+            availableObjectIndices[gameObject] = FindAvailableObjectIndex(gameObject);
+        }
+
+        RememberListCounts();
+        return gameObject;
+    }
+
+
+    private int FindAvailableObjectIndex(GameObject gameObject)
+    {
+        for(int i = AvailableObjects.Count - 1; i >= 0; i--)
+        {
+            if(AvailableObjects[i] == gameObject)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+
+    private void AddActiveObject(GameObject gameObject)
+    {
+        activeObjectIndices[gameObject] = ActiveObjects.Count;
+        ActiveObjects.Add(gameObject);
+        AddTrackedObject(activeObjectCounts, gameObject);
+        RememberListCounts();
+    }
+
+
+    private void RemoveActiveObject(GameObject gameObject)
+    {
+        int index = activeObjectIndices[gameObject];
+        int lastIndex = ActiveObjects.Count - 1;
+
+        if(index != lastIndex)
+        {
+            GameObject lastObject = ActiveObjects[lastIndex];
+            ActiveObjects[index] = lastObject;
+            activeObjectIndices[lastObject] = index;
+        }
+
+        ActiveObjects.RemoveAt(lastIndex);
+
+        if(RemoveTrackedObject(activeObjectCounts, gameObject) == 0)
+        {
+            activeObjectIndices.Remove(gameObject);
+        }
+        else
+        {
+            activeObjectIndices[gameObject] = FindActiveObjectIndex(gameObject);
+        }
+
+        RememberListCounts();
+    }
+
+
+    private int FindActiveObjectIndex(GameObject gameObject)
+    {
+        for(int i = ActiveObjects.Count - 1; i >= 0; i--)
+        {
+            if(ActiveObjects[i] == gameObject)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
 
     public GameObject GetObject()
     {
+        EnsureTrackingCurrent();
+
         if(AvailableObjects.Count > 0)
         {
             //There is an object available in the pool. Activate it and return it.
-            GameObject collectedObject = AvailableObjects[0];
+            GameObject collectedObject = TakeAvailableObject();
 
-            AvailableObjects.RemoveAt(0);
-            ActiveObjects.Add(collectedObject);
+            AddActiveObject(collectedObject);
 
             return collectedObject;
         }
@@ -83,7 +287,7 @@ public class ObjectPool : MonoBehaviour
         //This will indefinitely increase the size of the pool until it's cleared or otherwise modified
         GameObject newObject = CreateNewObject();
 
-        ActiveObjects.Add(newObject);
+        AddActiveObject(newObject);
         PoolSize++;
 
         return newObject;
@@ -92,10 +296,12 @@ public class ObjectPool : MonoBehaviour
 
     public void ReleaseObject(GameObject gameObject)
     {
-        if(!ActiveObjects.Contains(gameObject))
+        EnsureTrackingCurrent();
+
+        if(!activeObjectCounts.ContainsKey(gameObject))
         {
             //Oops haha how did that happen
-            if(!AvailableObjects.Contains(gameObject))
+            if(!availableObjectCounts.ContainsKey(gameObject))
             {
                 //Only want to destroy objects that don't exist anywhere
                 Destroy(gameObject);
@@ -104,7 +310,7 @@ public class ObjectPool : MonoBehaviour
             {
                 gameObject.transform.SetParent(transform);
                 gameObject.SetActive(false);
-                AvailableObjects.Add(gameObject);
+                AddAvailableObject(gameObject);
             }
             return;
         }
@@ -112,8 +318,8 @@ public class ObjectPool : MonoBehaviour
         gameObject.transform.SetParent(transform);
         gameObject.SetActive(false);
 
-        ActiveObjects.Remove(gameObject);
-        AvailableObjects.Add(gameObject);
+        RemoveActiveObject(gameObject);
+        AddAvailableObject(gameObject);
     }
 
 

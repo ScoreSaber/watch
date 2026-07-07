@@ -62,6 +62,18 @@ public class ScoreManager : MonoBehaviour
     [SerializeField] private ScoreColorSettings[] colorSettings;
 
     private ScoreColorSettings currentColorSettings = new ScoreColorSettings();
+    private int cachedScoreTextScore = int.MinValue;
+    private int cachedComboTextCombo = int.MinValue;
+    private int cachedMissTextMisses = int.MinValue;
+    private int cachedMultiplierTextComboMult = int.MinValue;
+    private int cachedComboProgressMult = int.MinValue;
+    private int cachedComboProgress = int.MinValue;
+    private float cachedScorePercentage = float.NaN;
+    private float cachedFCPercentage = float.NaN;
+    private float cachedGradePercentage = float.NaN;
+    private float cachedEnergyBarFillWidth = float.NaN;
+    private bool cachedFullCombo;
+    private bool hasCachedFullCombo;
 
     public static bool IsScoreSaberLegacyReplay => ReplayManager.IsReplayMode
         && ReplayManager.CurrentReplay?.scoreSaberLegacyScoreData != null;
@@ -231,21 +243,17 @@ public class ScoreManager : MonoBehaviour
     public void UpdateObjects()
     {
         Replay replay = ReplayManager.CurrentReplay;
+        if(replay == null)
+        {
+            return;
+        }
+
         if(ScoreSaberLegacyConverter.NeedsConversion(replay))
         {
             ScoreSaberLegacyConverter.Convert(replay, BeatmapManager.CurrentDifficulty.beatmapDifficulty);
 
             // rebuild scoring events from the synthetic notes
-            ScoringEvents.Clear();
-            foreach(NoteEvent noteEvent in replay.notes)
-            {
-                ScoringEvent newEvent = new ScoringEvent(noteEvent);
-                if(ScoringEvents.Last != null && noteEvent.eventTime < ScoringEvents.Last.Time)
-                {
-                    ScoringEvents.InsertSorted(newEvent);
-                }
-                else ScoringEvents.Add(newEvent);
-            }
+            RebuildScoringEventsFromReplayNotes(replay);
 
             // retrigger ObjectManager to process notes with the new events
             ObjectManager.Instance.UpdateDifficulty(BeatmapManager.CurrentDifficulty);
@@ -254,6 +262,21 @@ public class ScoreManager : MonoBehaviour
 
         InitializeMapScore();
         UpdateBeat(TimeManager.CurrentBeat);
+    }
+
+
+    public static void RebuildScoringEventsFromReplayNotes(Replay replay)
+    {
+        ScoringEvents.Clear();
+        foreach(NoteEvent noteEvent in replay.notes)
+        {
+            ScoringEvent newEvent = new ScoringEvent(noteEvent);
+            if(ScoringEvents.Last != null && noteEvent.eventTime < ScoringEvents.Last.Time)
+            {
+                ScoringEvents.InsertSorted(newEvent);
+            }
+            else ScoringEvents.Add(newEvent);
+        }
     }
 
 
@@ -321,6 +344,115 @@ public class ScoreManager : MonoBehaviour
         else percentageString = $"{percentageString}%";
 
         return percentageString;
+    }
+
+
+    private void ResetHudTextCache()
+    {
+        cachedScoreTextScore = int.MinValue;
+        cachedComboTextCombo = int.MinValue;
+        cachedMissTextMisses = int.MinValue;
+        cachedMultiplierTextComboMult = int.MinValue;
+        cachedComboProgressMult = int.MinValue;
+        cachedComboProgress = int.MinValue;
+        cachedScorePercentage = float.NaN;
+        cachedFCPercentage = float.NaN;
+        cachedGradePercentage = float.NaN;
+        cachedEnergyBarFillWidth = float.NaN;
+        hasCachedFullCombo = false;
+    }
+
+
+    private static string FormatScore(int score)
+    {
+        string baseScoreString = score.ToString();
+        string scoreString = "";
+        int maxIndex = baseScoreString.Length;
+        for(int i = maxIndex - 1; i >= 0; i -= 3)
+        {
+            int startIndex = Mathf.Max(i - 2, 0);
+            int length = Mathf.Min(3, maxIndex - startIndex);
+            string substring = baseScoreString.Substring(startIndex, length);
+            if(scoreString == "")
+            {
+                scoreString = substring;
+            }
+            else scoreString = substring + ' ' + scoreString;
+
+            maxIndex = startIndex;
+        }
+
+        return scoreString;
+    }
+
+
+    private void UpdateHudDisplay(
+        int currentScore,
+        float currentPercentage,
+        float currentFCPercentage,
+        int currentCombo,
+        int currentComboMult,
+        int currentComboProgress,
+        int currentMisses,
+        bool currentFullCombo,
+        float gradePercentage)
+    {
+        if(cachedComboTextCombo != currentCombo)
+        {
+            cachedComboTextCombo = currentCombo;
+            comboText.text = currentCombo.ToString();
+        }
+
+        if(cachedMissTextMisses != currentMisses)
+        {
+            cachedMissTextMisses = currentMisses;
+            missText.text = currentMisses.ToString();
+        }
+
+        if(cachedGradePercentage != gradePercentage)
+        {
+            cachedGradePercentage = gradePercentage;
+            gradeText.text = GradeFromPercentage(gradePercentage);
+        }
+
+        if(cachedScoreTextScore != currentScore)
+        {
+            cachedScoreTextScore = currentScore;
+            scoreText.text = FormatScore(currentScore);
+        }
+
+        if(cachedScorePercentage != currentPercentage)
+        {
+            cachedScorePercentage = currentPercentage;
+            scorePercentageText.text = GetPercentageString(currentPercentage);
+            ppText.text = PPManager.CanCalculatePP() ? $"{PPManager.CalculatePP(currentPercentage / 100f, out string shorthand):F2}pp ({shorthand})" : "";
+        }
+
+        if(cachedFCPercentage != currentFCPercentage)
+        {
+            cachedFCPercentage = currentFCPercentage;
+            fcPercentageText.text = $"FC : {GetPercentageString(currentFCPercentage)}";
+        }
+
+        if(cachedMultiplierTextComboMult != currentComboMult)
+        {
+            cachedMultiplierTextComboMult = currentComboMult;
+            multiplierText.text = multiplierPrefix + ScoringUtils.ComboMultipliers[currentComboMult].ToString();
+        }
+
+        if(cachedComboProgressMult != currentComboMult || cachedComboProgress != currentComboProgress)
+        {
+            cachedComboProgressMult = currentComboMult;
+            cachedComboProgress = currentComboProgress;
+            comboProgressFill.fillAmount = (float)currentComboProgress / ScoringUtils.HitsNeededForComboIncrease[currentComboMult];
+        }
+
+        if(!hasCachedFullCombo || cachedFullCombo != currentFullCombo)
+        {
+            hasCachedFullCombo = true;
+            cachedFullCombo = currentFullCombo;
+            FCBars.gameObject.SetActive(currentFullCombo);
+        }
     }
 
 
@@ -502,28 +634,29 @@ public class ScoreManager : MonoBehaviour
             currentMisses = 0;
         }
 
-        comboText.text = currentCombo.ToString();
-        missText.text = currentMisses.ToString();
-        ppText.text = PPManager.CanCalculatePP() ? $"{PPManager.CalculatePP(currentPercentage / 100f, out string shorthand):F2}pp ({shorthand})" : "";
-
         float effectivePercentage = currentPercentage * ReplayManager.ModifierMult;
         if(ReplayManager.HasFailed)
         {
             effectivePercentage *= 0.5f;
         }
-        gradeText.text = GradeFromPercentage(effectivePercentage);
-
-        scoreText.text = FormatScore(currentScore);
-
-        scorePercentageText.text = GetPercentageString(currentPercentage);
-        fcPercentageText.text = $"FC : {GetPercentageString(currentFCPercentage)}";
-
-        multiplierText.text = multiplierPrefix + ScoringUtils.ComboMultipliers[currentComboMult].ToString();
-        comboProgressFill.fillAmount = (float)currentComboProgress / ScoringUtils.HitsNeededForComboIncrease[currentComboMult];
-        FCBars.gameObject.SetActive(currentMisses <= 0);
+        UpdateHudDisplay(
+            currentScore,
+            currentPercentage,
+            currentFCPercentage,
+            currentCombo,
+            currentComboMult,
+            currentComboProgress,
+            currentMisses,
+            currentMisses <= 0,
+            effectivePercentage);
 
         float healthBarWidth = energyBar.sizeDelta.x;
-        energyBarFill.sizeDelta = new Vector2(healthBarWidth * PlayerPositionManager.Energy, energyBarFill.sizeDelta.y);
+        float energyBarFillWidth = healthBarWidth * PlayerPositionManager.Energy;
+        if(cachedEnergyBarFillWidth != energyBarFillWidth)
+        {
+            cachedEnergyBarFillWidth = energyBarFillWidth;
+            energyBarFill.sizeDelta = new Vector2(energyBarFillWidth, energyBarFill.sizeDelta.y);
+        }
     }
 
 
@@ -598,6 +731,7 @@ public class ScoreManager : MonoBehaviour
     {
         ClearIndicators();
         ScoringEvents.Clear();
+        ResetHudTextCache();
         hudObject.SetActive(false);
 
         missText.gameObject.SetActive(true);
@@ -615,6 +749,7 @@ public class ScoreManager : MonoBehaviour
         {
             bool showHud = SettingsManager.GetBool("showhud");
             ScoringEvents.Clear();
+            ResetHudTextCache();
             hudObject.SetActive(showHud);
 
             if(IsScoreSaberLegacyReplay)

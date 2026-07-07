@@ -8,6 +8,7 @@ public class RotatingLaserHandler : MonoBehaviour
     [SerializeField] protected RotationAxis rotationAxis;
 
     protected List<Vector3> defaultRotations = new List<Vector3>();
+    private readonly Dictionary<Transform, float> lastAngles = new Dictionary<Transform, float>();
 
 
     public virtual void UpdateLaserRotations(LaserSpeedEvent laserSpeedEvent, LightEventType type)
@@ -43,6 +44,13 @@ public class RotatingLaserHandler : MonoBehaviour
 
     protected void SetLaserRotation(Transform target, float angle, Vector3 defaultRotation)
     {
+        if(lastAngles.TryGetValue(target, out float lastAngle) && lastAngle == angle)
+        {
+            return;
+        }
+
+        lastAngles[target] = angle;
+
         Vector3 rotation = defaultRotation;
         switch(rotationAxis)
         {
@@ -65,6 +73,7 @@ public class RotatingLaserHandler : MonoBehaviour
         LightManager.OnLaserRotationsChanged += UpdateLaserRotations;
 
         defaultRotations.Clear();
+        lastAngles.Clear();
         foreach(Transform target in targets)
         {
             defaultRotations.Add(target.localEulerAngles);

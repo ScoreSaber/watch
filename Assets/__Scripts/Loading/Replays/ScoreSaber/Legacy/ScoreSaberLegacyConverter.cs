@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public static class ScoreSaberLegacyConverter
@@ -10,15 +11,24 @@ public static class ScoreSaberLegacyConverter
 
     public static void Convert(Replay replay, BeatmapDifficulty difficulty)
     {
+        Convert(replay, difficulty, TimeManager.BaseBPM);
+    }
+
+
+    public static void Convert(Replay replay, BeatmapDifficulty difficulty, float baseBpm)
+    {
         List<LegacyScoreFrame> legacyData = replay.scoreSaberLegacyScoreData;
         if(legacyData == null || legacyData.Count == 0) return;
 
+        baseBpm = NormalizeBaseBpm(baseBpm);
+        List<BpmChange> bpmChanges = BuildBpmChanges(difficulty, baseBpm);
         List<ComboChangePoint> comboChanges = FindComboChanges(legacyData);
         List<LegacyNoteAction> actions = ComputeNoteActions(legacyData, comboChanges);
-        (List<NoteEvent> syntheticNotes, int missCount, int badCutCount) = MatchActionsToNotes(actions, difficulty, replay.frames);
+        (List<NoteEvent> syntheticNotes, int missCount, int badCutCount) = MatchActionsToNotes(
+            actions, difficulty, replay.frames, baseBpm, bpmChanges);
 
         replay.notes = syntheticNotes;
-        replay.scoreSaberLegacyHUDData = BuildHUDData(difficulty);
+        replay.scoreSaberLegacyHUDData = BuildHUDData(difficulty, baseBpm, bpmChanges);
         replay.scoreSaberLegacyConverted = true;
 
         Debug.Log($"Generated {syntheticNotes.Count} synthetic note events for legacy replay ({missCount} misses, {badCutCount} bad cuts detected).");
@@ -167,7 +177,11 @@ public static class ScoreSaberLegacyConverter
     }
 
     private static (List<NoteEvent>, int, int) MatchActionsToNotes(
-        List<LegacyNoteAction> actions, BeatmapDifficulty difficulty, List<Frame> frames)
+        List<LegacyNoteAction> actions,
+        BeatmapDifficulty difficulty,
+        List<Frame> frames,
+        float baseBpm,
+        List<BpmChange> bpmChanges)
     {
         int noteCount = difficulty.Notes.Length;
         float[] noteTimes = new float[noteCount];
@@ -179,7 +193,7 @@ public static class ScoreSaberLegacyConverter
         for(int i = 0; i < noteCount; i++)
         {
             BeatmapColorNote note = difficulty.Notes[i];
-            noteTimes[i] = TimeManager.TimeFromBeat(note.b);
+            noteTimes[i] = TimeFromBeat(note.b, baseBpm, bpmChanges);
             noteIDs[i] = ((int)ScoringType.Note * 10000) + (note.x * 1000) + (note.y * 100) + (note.c * 10) + note.d;
             noteColors[i] = note.c;
             noteCutDirs[i] = note.d;
@@ -378,7 +392,8 @@ public static class ScoreSaberLegacyConverter
         };
     }
 
-    private static LegacyHUDData BuildHUDData(BeatmapDifficulty difficulty)
+    private static LegacyHUDData BuildHUDData(
+        BeatmapDifficulty difficulty, float baseBpm, List<BpmChange> bpmChanges)
     {
         LegacyHUDData hudData = new LegacyHUDData();
         int maxScore = 0;
@@ -390,11 +405,78 @@ public static class ScoreSaberLegacyConverter
             maxScore += ScoringUtils.MaxNoteScore * ScoringUtils.ComboMultipliers[comboMult];
             hudData.maxScores.Add(new LegacyHUDData.MaxScoreFrame
             {
-                time = TimeManager.TimeFromBeat(note.b),
+                time = TimeFromBeat(note.b, baseBpm, bpmChanges),
                 maxScore = maxScore
             });
         }
         return hudData;
+    }
+
+
+    private static float NormalizeBaseBpm(float baseBpm)
+    {
+        return baseBpm > 0f ? baseBpm : 0.0001f;
+    }
+
+
+    private static List<BpmChange> BuildBpmChanges(BeatmapDifficulty difficulty, float baseBpm)
+    {
+        List<BeatmapBpmEvent> bpmEvents = new List<BeatmapBpmEvent>();
+        bpmEvents.AddRange(difficulty.BpmEvents);
+        bpmEvents = bpmEvents.OrderBy(x => x.b).ToList();
+
+        List<BpmChange> bpmChanges = new List<BpmChange>();
+        float currentTime = 0f;
+        float lastBeat = 0f;
+        float lastBpm = baseBpm;
+        foreach(BeatmapBpmEvent bpmEvent in bpmEvents)
+        {
+            currentTime += TimeManager.RawTimeFromBeat(bpmEvent.b - lastBeat, lastBpm);
+            bpmChanges.Add(new BpmChange
+            {
+                Beat = bpmEvent.b,
+                Time = currentTime,
+                BPM = bpmEvent.m
+            });
+
+            lastBeat = bpmEvent.b;
+            lastBpm = bpmEvent.m;
+        }
+
+        return bpmChanges;
+    }
+
+
+    private static float TimeFromBeat(float beat, float baseBpm, List<BpmChange> bpmChanges)
+    {
+        if(bpmChanges.Count == 0)
+        {
+            return TimeManager.RawTimeFromBeat(beat, baseBpm);
+        }
+
+        BpmChange lastChange = LastBpmChangeBeforeBeat(beat, bpmChanges);
+        return lastChange.Time + TimeManager.RawTimeFromBeat(beat - lastChange.Beat, lastChange.BPM);
+    }
+
+
+    private static BpmChange LastBpmChangeBeforeBeat(float beat, List<BpmChange> bpmChanges)
+    {
+        int low = 0;
+        int high = bpmChanges.Count - 1;
+        int resultIndex = -1;
+
+        while(low <= high)
+        {
+            int mid = low + ((high - low) / 2);
+            if(bpmChanges[mid].Beat < beat)
+            {
+                resultIndex = mid;
+                low = mid + 1;
+            }
+            else high = mid - 1;
+        }
+
+        return resultIndex < 0 ? default(BpmChange) : bpmChanges[resultIndex];
     }
 
     private struct ComboChangePoint

@@ -20,26 +20,43 @@ public class ScoreColorSettings
     [SerializeField] public List<HsvTimeDependencyJudgement> timeDependencyJudgements = new List<HsvTimeDependencyJudgement>();
     [SerializeField] public Color chainLinkColor = Color.white;
 
+    [NonSerialized] private StringBuilder formattedScoreBuilder;
+
 
     private string GetFormattedScoreText(ScoreJudgement judgement, ScoringEvent scoringEvent)
     {
         float timeDependency = (float)Math.Round(scoringEvent.TimeDependency * timeDependencyMult, timeDependencyDecimals);
 
-        HsvJudgementSegment preSwingJudgement = preSwingJudgements.FirstOrDefault(x => x.threshold <= scoringEvent.PreSwingScore);
-        HsvJudgementSegment accJudgement = accJudgements.FirstOrDefault(x => x.threshold <= scoringEvent.AccuracyScore);
-        HsvJudgementSegment postSwingJudgement = postSwingJudgements.FirstOrDefault(x => x.threshold <= scoringEvent.PostSwingScore);
+        HsvJudgementSegment preSwingJudgement = FindJudgement(preSwingJudgements, scoringEvent.PreSwingScore);
+        HsvJudgementSegment accJudgement = FindJudgement(accJudgements, scoringEvent.AccuracyScore);
+        HsvJudgementSegment postSwingJudgement = FindJudgement(postSwingJudgements, scoringEvent.PostSwingScore);
 
-        HsvTimeDependencyJudgement timeDependencyJudgement = timeDependencyJudgements.FirstOrDefault(x => x.threshold <= scoringEvent.TimeDependency);
+        HsvTimeDependencyJudgement timeDependencyJudgement = FindJudgement(timeDependencyJudgements, scoringEvent.TimeDependency);
 
-        var builder = new StringBuilder();
-        var formatString = judgement.text;
+        var formatString = judgement.text ?? "";
         var nextPercentIndex = formatString.IndexOf('%');
+        if(nextPercentIndex == -1)
+        {
+            return formatString;
+        }
+
+        if(formattedScoreBuilder == null)
+        {
+            formattedScoreBuilder = new StringBuilder(formatString.Length);
+        }
+
+        StringBuilder builder = formattedScoreBuilder;
+        builder.Clear();
+
+        int textStartIndex = 0;
         while(nextPercentIndex != -1)
         {
-            builder.Append(formatString.Substring(0, nextPercentIndex));
+            builder.Append(formatString, textStartIndex, nextPercentIndex - textStartIndex);
             if(formatString.Length == nextPercentIndex + 1)
             {
-                formatString += " ";
+                builder.Append("% ");
+                textStartIndex = formatString.Length;
+                break;
             }
 
             var specifier = formatString[nextPercentIndex + 1];
@@ -83,15 +100,63 @@ public class ScoreColorSettings
                     builder.Append("<br>");
                     break;
                 default:
-                    builder.Append("%" + specifier);
+                    builder.Append('%');
+                    builder.Append(specifier);
                     break;
             }
 
-            formatString = formatString.Remove(0, nextPercentIndex + 2);
-            nextPercentIndex = formatString.IndexOf('%');
+            textStartIndex = nextPercentIndex + 2;
+            nextPercentIndex = formatString.IndexOf('%', textStartIndex);
         }
 
-        return builder.Append(formatString).ToString();
+        if(textStartIndex < formatString.Length)
+        {
+            builder.Append(formatString, textStartIndex, formatString.Length - textStartIndex);
+        }
+
+        string result = builder.ToString();
+        builder.Clear();
+        return result;
+    }
+
+
+    private static HsvJudgementSegment FindJudgement(List<HsvJudgementSegment> judgements, int score)
+    {
+        if(judgements == null)
+        {
+            return null;
+        }
+
+        for(int i = 0; i < judgements.Count; i++)
+        {
+            HsvJudgementSegment judgement = judgements[i];
+            if(judgement.threshold <= score)
+            {
+                return judgement;
+            }
+        }
+
+        return null;
+    }
+
+
+    private static HsvTimeDependencyJudgement FindJudgement(List<HsvTimeDependencyJudgement> judgements, float timeDependency)
+    {
+        if(judgements == null)
+        {
+            return null;
+        }
+
+        for(int i = 0; i < judgements.Count; i++)
+        {
+            HsvTimeDependencyJudgement judgement = judgements[i];
+            if(judgement.threshold <= timeDependency)
+            {
+                return judgement;
+            }
+        }
+
+        return null;
     }
 
 

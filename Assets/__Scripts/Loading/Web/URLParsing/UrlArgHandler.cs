@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Web;
 using System.Linq;
@@ -113,6 +114,7 @@ public class UrlArgHandler : MonoBehaviour
     private static string settingsOverride;
 
     [SerializeField] private MapLoader mapLoader;
+    private Coroutine autoPlayCoroutine;
 
     public static string ArcViewerURL => GetArcViewerURL();
 
@@ -377,8 +379,43 @@ public class UrlArgHandler : MonoBehaviour
 
     private void StartPlaying(Difficulty difficulty)
     {
-        TimeManager.SetPlaying(true);
         BeatmapManager.OnBeatmapDifficultyChanged -= StartPlaying;
+        if(autoPlayCoroutine != null)
+        {
+            StopCoroutine(autoPlayCoroutine);
+        }
+
+        autoPlayCoroutine = StartCoroutine(StartPlayingWhenReady());
+    }
+
+
+    private IEnumerator StartPlayingWhenReady()
+    {
+        // Let map-loaded subscriptions finish before starting the replay clock.
+        yield return null;
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+        while(!WebSongController.SongAudioReady)
+        {
+            bool needsAudio = !SettingsManager.Loaded;
+            if(!needsAudio)
+            {
+                needsAudio = (SettingsManager.GetBool("enablemusic") && SettingsManager.GetFloat("musicvolume") > Mathf.Epsilon)
+                    || (SettingsManager.GetBool("enablehitsound") && SettingsManager.GetFloat("hitsoundvolume") > Mathf.Epsilon);
+            }
+
+            if(!needsAudio)
+            {
+                break;
+            }
+
+            WebSongController.RequestAudioUnlock();
+            yield return null;
+        }
+#endif
+
+        TimeManager.SetPlaying(true);
+        autoPlayCoroutine = null;
     }
 
 
@@ -445,6 +482,11 @@ public class UrlArgHandler : MonoBehaviour
         BeatmapManager.OnBeatmapDifficultyChanged -= StartPlaying;
         MapLoader.OnMapLoaded -= SetTime;
         MapLoader.OnMapLoaded -= SetDifficulty;
+        if(autoPlayCoroutine != null)
+        {
+            StopCoroutine(autoPlayCoroutine);
+            autoPlayCoroutine = null;
+        }
     }
 
 

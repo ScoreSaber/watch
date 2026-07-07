@@ -12,12 +12,34 @@ public class ChainLinkHandler : MonoBehaviour
     private bool outline;
     private Color outlineColor;
 
+    private Material baseDotMaterial;
+
     private MaterialPropertyBlock outlineProperties;
 
 
-    public void SetMaterial(Material newMaterial)
+    public Material BaseDotMaterial
     {
-        meshRenderer.sharedMaterial = newMaterial;
+        get
+        {
+            if(baseDotMaterial == null) baseDotMaterial = dotMeshRenderer.sharedMaterial;
+            return baseDotMaterial;
+        }
+    }
+
+
+    public void SetSharedMaterials(Material linkMaterial, Material dotMaterial)
+    {
+        meshRenderer.sharedMaterial = linkMaterial;
+        dotMeshRenderer.sharedMaterial = dotMaterial;
+        ClearProperties();
+    }
+
+
+    public void SetCustomMaterials(Material linkMaterial)
+    {
+        meshRenderer.sharedMaterial = linkMaterial;
+        dotMeshRenderer.sharedMaterial = BaseDotMaterial;
+        ClearProperties();
     }
 
 
@@ -30,6 +52,19 @@ public class ChainLinkHandler : MonoBehaviour
     public void SetDotProperties(MaterialPropertyBlock properties)
     {
         dotMeshRenderer.SetPropertyBlock(properties);
+    }
+
+
+    private void ClearProperties()
+    {
+        meshRenderer.SetPropertyBlock(null);
+        dotMeshRenderer.SetPropertyBlock(null);
+    }
+
+
+    private void Awake()
+    {
+        baseDotMaterial = dotMeshRenderer.sharedMaterial;
     }
 
 

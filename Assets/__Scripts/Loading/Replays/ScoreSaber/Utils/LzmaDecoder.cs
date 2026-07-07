@@ -7,14 +7,22 @@
 
 using System;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace ArcViewer.LZMA
 {
     public static class LzmaHelper
     {
+        private const int YieldSliceBytes = 256 * 1024;
+
         public static byte[] Decompress(byte[] input)
         {
-            using(MemoryStream inputStream = new MemoryStream(input))
+            return Decompress(input, 0, input.Length);
+        }
+
+        public static byte[] Decompress(byte[] input, int offset, int count)
+        {
+            using(MemoryStream inputStream = new MemoryStream(input, offset, count, false))
             {
                 byte[] properties = new byte[5];
                 if(inputStream.Read(properties, 0, 5) != 5)
@@ -32,12 +40,61 @@ namespace ArcViewer.LZMA
                 LzmaDecoder decoder = new LzmaDecoder();
                 decoder.SetDecoderProperties(properties);
 
-                using(MemoryStream outputStream = new MemoryStream())
+                using(MemoryStream outputStream = CreateOutputStream(outSize))
                 {
                     decoder.Code(inputStream, outputStream, outSize);
-                    return outputStream.ToArray();
+                    return GetOutputBytes(outputStream);
                 }
             }
+        }
+
+        public static async Task<byte[]> DecompressAsync(byte[] input, int offset, int count)
+        {
+            using(MemoryStream inputStream = new MemoryStream(input, offset, count, false))
+            {
+                byte[] properties = new byte[5];
+                if(inputStream.Read(properties, 0, 5) != 5)
+                    throw new InvalidDataException("Invalid LZMA header: can't read properties");
+
+                long outSize = 0;
+                for(int i = 0; i < 8; i++)
+                {
+                    int v = inputStream.ReadByte();
+                    if(v < 0)
+                        throw new InvalidDataException("Invalid LZMA header: can't read size");
+                    outSize |= ((long)(byte)v) << (8 * i);
+                }
+
+                LzmaDecoder decoder = new LzmaDecoder();
+                decoder.SetDecoderProperties(properties);
+
+                using(MemoryStream outputStream = CreateOutputStream(outSize))
+                {
+                    await decoder.CodeAsync(inputStream, outputStream, outSize, YieldSliceBytes);
+                    return GetOutputBytes(outputStream);
+                }
+            }
+        }
+
+        private static MemoryStream CreateOutputStream(long outSize)
+        {
+            if(outSize < 0 || outSize > int.MaxValue)
+            {
+                return new MemoryStream();
+            }
+
+            return new MemoryStream((int)outSize);
+        }
+
+        private static byte[] GetOutputBytes(MemoryStream outputStream)
+        {
+            if(outputStream.TryGetBuffer(out ArraySegment<byte> buffer) &&
+                buffer.Offset == 0 && buffer.Count == buffer.Array.Length)
+            {
+                return buffer.Array;
+            }
+
+            return outputStream.ToArray();
         }
     }
 
@@ -610,6 +667,126 @@ namespace ArcViewer.LZMA
             }
             while(nowPos64 < outSize64)
             {
+                uint posState = (uint)nowPos64 & m_PosStateMask;
+                if(m_IsMatchDecoders[(state.Index << Base.kNumPosStatesBitsMax) + posState].Decode(m_RangeDecoder) == 0)
+                {
+                    byte b;
+                    byte prevByte = m_OutWindow.GetByte(0);
+                    if(!state.IsCharState())
+                        b = m_LiteralDecoder.DecodeWithMatchByte(m_RangeDecoder,
+                            (uint)nowPos64, prevByte, m_OutWindow.GetByte(rep0));
+                    else
+                        b = m_LiteralDecoder.DecodeNormal(m_RangeDecoder, (uint)nowPos64, prevByte);
+                    m_OutWindow.PutByte(b);
+                    state.UpdateChar();
+                    nowPos64++;
+                }
+                else
+                {
+                    uint len;
+                    if(m_IsRepDecoders[state.Index].Decode(m_RangeDecoder) == 1)
+                    {
+                        if(m_IsRepG0Decoders[state.Index].Decode(m_RangeDecoder) == 0)
+                        {
+                            if(m_IsRep0LongDecoders[(state.Index << Base.kNumPosStatesBitsMax) + posState].Decode(m_RangeDecoder) == 0)
+                            {
+                                state.UpdateShortRep();
+                                m_OutWindow.PutByte(m_OutWindow.GetByte(rep0));
+                                nowPos64++;
+                                continue;
+                            }
+                        }
+                        else
+                        {
+                            UInt32 distance;
+                            if(m_IsRepG1Decoders[state.Index].Decode(m_RangeDecoder) == 0)
+                            {
+                                distance = rep1;
+                            }
+                            else
+                            {
+                                if(m_IsRepG2Decoders[state.Index].Decode(m_RangeDecoder) == 0)
+                                    distance = rep2;
+                                else
+                                {
+                                    distance = rep3;
+                                    rep3 = rep2;
+                                }
+                                rep2 = rep1;
+                            }
+                            rep1 = rep0;
+                            rep0 = distance;
+                        }
+                        len = m_RepLenDecoder.Decode(m_RangeDecoder, posState) + Base.kMatchMinLen;
+                        state.UpdateRep();
+                    }
+                    else
+                    {
+                        rep3 = rep2;
+                        rep2 = rep1;
+                        rep1 = rep0;
+                        len = Base.kMatchMinLen + m_LenDecoder.Decode(m_RangeDecoder, posState);
+                        state.UpdateMatch();
+                        uint posSlot = m_PosSlotDecoder[Base.GetLenToPosState(len)].Decode(m_RangeDecoder);
+                        if(posSlot >= Base.kStartPosModelIndex)
+                        {
+                            int numDirectBits = (int)((posSlot >> 1) - 1);
+                            rep0 = ((2 | (posSlot & 1)) << numDirectBits);
+                            if(posSlot < Base.kEndPosModelIndex)
+                                rep0 += BitTreeDecoder.ReverseDecode(m_PosDecoders,
+                                        rep0 - posSlot - 1, m_RangeDecoder, numDirectBits);
+                            else
+                            {
+                                rep0 += (m_RangeDecoder.DecodeDirectBits(
+                                    numDirectBits - Base.kNumAlignBits) << Base.kNumAlignBits);
+                                rep0 += m_PosAlignDecoder.ReverseDecode(m_RangeDecoder);
+                            }
+                        }
+                        else
+                            rep0 = posSlot;
+                    }
+                    if(rep0 >= nowPos64 || rep0 >= m_DictionarySizeCheck)
+                    {
+                        if(rep0 == 0xFFFFFFFF)
+                            break;
+                        throw new DataErrorException();
+                    }
+                    m_OutWindow.CopyBlock(rep0, len);
+                    nowPos64 += len;
+                }
+            }
+            m_OutWindow.ReleaseStream();
+            m_RangeDecoder.ReleaseStream();
+        }
+
+        public async Task CodeAsync(Stream inStream, Stream outStream, long outSize, int yieldSliceBytes)
+        {
+            Init(inStream, outStream);
+
+            Base.State state = new Base.State();
+            state.Init();
+            uint rep0 = 0, rep1 = 0, rep2 = 0, rep3 = 0;
+
+            UInt64 nowPos64 = 0;
+            UInt64 outSize64 = (UInt64)outSize;
+            UInt64 nextYieldPos = (UInt64)Math.Max(1, yieldSliceBytes);
+            if(nowPos64 < outSize64)
+            {
+                if(m_IsMatchDecoders[state.Index << Base.kNumPosStatesBitsMax].Decode(m_RangeDecoder) != 0)
+                    throw new DataErrorException();
+                state.UpdateChar();
+                byte b = m_LiteralDecoder.DecodeNormal(m_RangeDecoder, 0, 0);
+                m_OutWindow.PutByte(b);
+                nowPos64++;
+            }
+            while(nowPos64 < outSize64)
+            {
+                if(nowPos64 >= nextYieldPos)
+                {
+                    await Task.Yield();
+                    nextYieldPos = nowPos64 + (UInt64)Math.Max(1, yieldSliceBytes);
+                }
+
                 uint posState = (uint)nowPos64 & m_PosStateMask;
                 if(m_IsMatchDecoders[(state.Index << Base.kNumPosStatesBitsMax) + posState].Decode(m_RangeDecoder) == 0)
                 {

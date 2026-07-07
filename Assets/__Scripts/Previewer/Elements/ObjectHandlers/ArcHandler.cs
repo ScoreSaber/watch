@@ -2,15 +2,44 @@ using UnityEngine;
 
 public class ArcHandler : MonoBehaviour
 {
+    private static readonly int textureOffsetID = Shader.PropertyToID("_TextureOffset");
+    private static readonly int fadeStartPointID = Shader.PropertyToID("_FadeStartPoint");
+    private static readonly int baseColorID = Shader.PropertyToID("_BaseColor");
+
     [SerializeField] private LineRenderer lineRenderer;
 
     private MaterialPropertyBlock materialProperties;
+    private Color lastBaseColor;
+    private float lastTextureOffset;
+    private float lastCloseFadeDist;
+    private bool propertiesDirty = true;
+
+
+    private static bool ColorValuesEqual(Color a, Color b)
+    {
+        return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+    }
 
 
     public void SetArcPoints(Vector3[] newPoints)
     {
-        lineRenderer.positionCount = newPoints.Length;
-        lineRenderer.SetPositions(newPoints);
+        SetArcPoints(newPoints, newPoints.Length);
+    }
+
+
+    public void SetArcPoints(Vector3[] newPoints, int pointCount)
+    {
+        lineRenderer.positionCount = pointCount;
+        if(pointCount == newPoints.Length)
+        {
+            lineRenderer.SetPositions(newPoints);
+            return;
+        }
+
+        for(int i = 0; i < pointCount; i++)
+        {
+            lineRenderer.SetPosition(i, newPoints[i]);
+        }
     }
 
 
@@ -56,17 +85,32 @@ public class ArcHandler : MonoBehaviour
         //Allows us to change properties on this arc without worrying about reference types
         if(materialProperties == null) materialProperties = new MaterialPropertyBlock();
         lineRenderer.GetPropertyBlock(materialProperties);
+        lastBaseColor = materialProperties.GetColor(baseColorID);
+        propertiesDirty = true;
     }
 
 
     public void SetProperties(float alpha, float textureOffset, Color? customColor, float closeFadeDist)
     {
-        materialProperties.SetFloat("_TextureOffset", textureOffset);
-        materialProperties.SetFloat("_FadeStartPoint", closeFadeDist);
-
-        Color color = customColor ?? materialProperties.GetColor("_BaseColor");
+        Color color = customColor ?? lastBaseColor;
         color.a = alpha;
-        materialProperties.SetColor("_BaseColor", color);
+
+        if(!propertiesDirty
+            && lastTextureOffset == textureOffset
+            && lastCloseFadeDist == closeFadeDist
+            && ColorValuesEqual(lastBaseColor, color))
+        {
+            return;
+        }
+
+        lastTextureOffset = textureOffset;
+        lastCloseFadeDist = closeFadeDist;
+        lastBaseColor = color;
+        propertiesDirty = false;
+
+        materialProperties.SetFloat(textureOffsetID, textureOffset);
+        materialProperties.SetFloat(fadeStartPointID, closeFadeDist);
+        materialProperties.SetColor(baseColorID, color);
 
         lineRenderer.SetPropertyBlock(materialProperties);
     }

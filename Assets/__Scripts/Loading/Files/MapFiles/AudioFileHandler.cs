@@ -14,15 +14,19 @@ public static class AudioFileHandler
     private static AudioUploadState uploadState;
 
 
-    public static async Task<WebSongClip> WebSongClipFromStream(MemoryStream stream, string filename)
+    public static async Task<WebSongClip> WebSongClipFromData(byte[] data, string filename)
     {
         WebSongClip newClip = null;
         try
         {
+            if(data == null)
+            {
+                return null;
+            }
+
             //Create the audio clip where we'll write the audio data
             newClip = new WebSongClip();
 
-            byte[] data = stream.ToArray();
             bool isOgg = filename.EndsWith(".ogg", StringComparison.InvariantCultureIgnoreCase)
                 || filename.EndsWith(".egg", StringComparison.InvariantCultureIgnoreCase)
                 || GetAudioTypeFromData(data) == AudioType.OGGVORBIS;
@@ -49,6 +53,20 @@ public static class AudioFileHandler
             Debug.LogWarning($"Failed to load audio data with error: {e.Message}, {e.StackTrace}");
             newClip?.Dispose();
 
+            return null;
+        }
+    }
+
+
+    public static async Task<WebSongClip> WebSongClipFromStream(MemoryStream stream, string filename)
+    {
+        try
+        {
+            return await WebSongClipFromData(stream?.ToArray(), filename);
+        }
+        catch(Exception e)
+        {
+            Debug.LogWarning($"Failed to load audio data with error: {e.Message}, {e.StackTrace}");
             return null;
         }
     }

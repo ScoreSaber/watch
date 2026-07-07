@@ -30,59 +30,56 @@ public class ZipReader : IMapDataLoader
     public async Task<LoadedMap> GetMap()
     {
 #if !UNITY_WEBGL || UNITY_EDITOR
-        LoadedMapData mapData = await Task.Run(() => GetMapData());
+        BeatmapInfo info = await Task.Run(() => GetInfoDataAsync());
 #else
-        LoadedMapData mapData = await GetMapData();
+        BeatmapInfo info = await GetInfoDataAsync();
 #endif
-        if(mapData.Info == null)
+        if(info == null)
         {
             ErrorHandler.Instance.QueuePopup(ErrorType.Error, "Unable to load Info.dat!");
             return LoadedMap.Empty;
         }
-        if(mapData.Difficulties == null || mapData.Difficulties.Count == 0)
+
+        if(!InfoHasDifficulties(info))
         {
             ErrorHandler.Instance.QueuePopup(ErrorType.Error, "Unable to load difficulties!");
             return LoadedMap.Empty;
         }
 
-        BeatmapInfo info = mapData.Info;
-
-        Debug.Log("Loading audio file.");
-        MapLoader.LoadingMessage = "Loading song";
-        await Task.Yield();
-
-        string songFilename = info.audio?.songFilename ?? "";
-        using Stream songStream = Archive.GetEntryCaseInsensitive(songFilename)?.Open();
-        if(songStream == null)
-        {
-            ErrorHandler.Instance.QueuePopup(ErrorType.Error, "Song file not found!");
-            Debug.LogWarning($"Didn't find audio file {songFilename}!");
-            return LoadedMap.Empty;
-        }
-
-        using MemoryStream songData = new MemoryStream(FileUtil.StreamToBytes(songStream));
-        if(songData == null)
-        {
-            ErrorHandler.Instance.QueuePopup(ErrorType.Error, "Unable to read song file!");
-            Debug.LogWarning($"Failed to read memory stream for audio file {songFilename}!");
-            return LoadedMap.Empty;
-        }
+        Task<SongLoadResult> songTask = LoadSong(info);
 
 #if !UNITY_WEBGL || UNITY_EDITOR
-        AudioClip song = await AudioClipFromMemoryStream(songData, songFilename);
+        LoadedMapData mapData = await Task.Run(() => GetMapData(info));
 #else
-        WebSongClip song = await AudioFileHandler.WebSongClipFromStream(songData, songFilename);
+        LoadedMapData mapData = await GetMapData(info);
 #endif
-        if(song == null)
+        if(mapData.Info == null)
         {
-            //Failed to load song
-            ErrorHandler.Instance.QueuePopup(ErrorType.Error, "Unable to load song file!");
+            await DisposeSongIfLoaded(songTask);
+            ErrorHandler.Instance.QueuePopup(ErrorType.Error, "Unable to load Info.dat!");
+            return LoadedMap.Empty;
+        }
+        if(mapData.Difficulties == null || mapData.Difficulties.Count == 0)
+        {
+            await DisposeSongIfLoaded(songTask);
+            ErrorHandler.Instance.QueuePopup(ErrorType.Error, "Unable to load difficulties!");
             return LoadedMap.Empty;
         }
 
+        SongLoadResult songResult = await songTask;
+        if(songResult.Song == null)
+        {
+            ErrorHandler.Instance.QueuePopup(ErrorType.Error, songResult.ErrorMessage ?? "Unable to load song file!");
+            return LoadedMap.Empty;
+        }
+
+        return new LoadedMap(mapData, null, songResult.Song);
+    }
+
+
+    public byte[] LoadCoverImageData(BeatmapInfo info)
+    {
         Debug.Log("Loading cover image.");
-        MapLoader.LoadingMessage = "Loading cover image";
-        await Task.Yield();
 
         byte[] coverImageData = new byte[0];
         string coverFilename = info.coverImageFilename ?? "";
@@ -102,16 +99,29 @@ public class ZipReader : IMapDataLoader
             }
         }
 
-        return new LoadedMap(mapData, coverImageData, song);
+        return coverImageData;
     }
 
 
     public async Task<LoadedMapData> GetMapData()
     {
+        BeatmapInfo info = await GetInfoDataAsync();
+
+        return await GetMapData(info);
+    }
+
+
+    private async Task<BeatmapInfo> GetInfoDataAsync()
+    {
         MapLoader.LoadingMessage = "Loading Info.dat";
         await Task.Yield();
-        BeatmapInfo info = GetInfoData(Archive);
 
+        return GetInfoData(Archive);
+    }
+
+
+    private async Task<LoadedMapData> GetMapData(BeatmapInfo info)
+    {
         if(info == null)
         {
             //Failed to load info (errors are handled in GetInfoData)
@@ -120,9 +130,8 @@ public class ZipReader : IMapDataLoader
 
         Debug.Log($"Loaded info for {info.song.author} - {info.song.title}");
 
-        if(info.difficultyBeatmaps == null || info.difficultyBeatmaps.Length < 1)
+        if(!InfoHasDifficulties(info))
         {
-            Debug.LogWarning("Info lists no difficulties!");
             return LoadedMapData.Empty;
         }
 
@@ -136,6 +145,66 @@ public class ZipReader : IMapDataLoader
         LoadBookmarks(mapData);
 
         return mapData;
+    }
+
+
+    private static bool InfoHasDifficulties(BeatmapInfo info)
+    {
+        if(info.difficultyBeatmaps == null || info.difficultyBeatmaps.Length < 1)
+        {
+            Debug.LogWarning("Info lists no difficulties!");
+            return false;
+        }
+
+        return true;
+    }
+
+
+    private async Task<SongLoadResult> LoadSong(BeatmapInfo info)
+    {
+        Debug.Log("Loading audio file.");
+        MapLoader.LoadingMessage = "Loading song";
+
+        string songFilename = info.audio?.songFilename ?? "";
+        ZipArchiveEntry songEntry = Archive.GetEntryCaseInsensitive(songFilename);
+        using Stream songStream = songEntry?.Open();
+        if(songStream == null)
+        {
+            Debug.LogWarning($"Didn't find audio file {songFilename}!");
+            return new SongLoadResult("Song file not found!");
+        }
+
+        byte[] songData = FileUtil.StreamToBytes(songStream, songEntry.Length);
+        if(songData == null)
+        {
+            Debug.LogWarning($"Failed to read memory stream for audio file {songFilename}!");
+            return new SongLoadResult("Unable to read song file!");
+        }
+
+#if !UNITY_WEBGL || UNITY_EDITOR
+        AudioClip song = await AudioClipFromData(songData, songFilename);
+#else
+        WebSongClip song = await AudioFileHandler.WebSongClipFromData(songData, songFilename);
+#endif
+        return new SongLoadResult(song, song == null ? "Unable to load song file!" : null);
+    }
+
+
+    private static async Task DisposeSongIfLoaded(Task<SongLoadResult> songTask)
+    {
+        try
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            SongLoadResult songResult = await songTask;
+            songResult?.Song?.Dispose();
+#else
+            await songTask;
+#endif
+        }
+        catch(Exception err)
+        {
+            Debug.LogWarning($"Song loading failed after map data failed with error: {err.Message}, {err.StackTrace}");
+        }
     }
 
 
@@ -221,6 +290,34 @@ public class ZipReader : IMapDataLoader
         {
             Debug.LogWarning($"Unable to parse {entry.Name} with error: {err.Message}, {err.StackTrace}");
             return null;
+        }
+    }
+
+
+    private sealed class SongLoadResult
+    {
+        public string ErrorMessage;
+
+#if !UNITY_WEBGL || UNITY_EDITOR
+        public AudioClip Song;
+
+
+        public SongLoadResult(AudioClip song, string errorMessage = null)
+#else
+        public WebSongClip Song;
+
+
+        public SongLoadResult(WebSongClip song, string errorMessage = null)
+#endif
+        {
+            Song = song;
+            ErrorMessage = errorMessage;
+        }
+
+
+        public SongLoadResult(string errorMessage)
+        {
+            ErrorMessage = errorMessage;
         }
     }
 
@@ -326,12 +423,12 @@ public class ZipReader : IMapDataLoader
 
 
 #if !UNITY_WEBGL || UNITY_EDITOR
-    private static async Task<AudioClip> AudioClipFromMemoryStream(MemoryStream stream, string songFilename)
+    private static async Task<AudioClip> AudioClipFromData(byte[] data, string songFilename)
     {
         //Write song data to a tempfile so it can be loaded through a uwr
         Debug.Log($"Writing {songFilename} to temp file.");
         using TempFile songFile = new TempFile();
-        await File.WriteAllBytesAsync(songFile.Path, stream.ToArray());
+        await File.WriteAllBytesAsync(songFile.Path, data);
 
         return await AudioFileHandler.LoadAudioDirectory(songFile.Path, songFilename);
     }

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 public class NoteManager : MapElementManager<Note>
@@ -29,14 +28,30 @@ public class NoteManager : MapElementManager<Note>
     [SerializeField, Range(0f, 1f)] private float arrowGlowSaturation;
     [SerializeField] private float arrowEmission;
 
-    //These are all public so ChainManager can access them
-    public MaterialPropertyBlock redNoteProperties;
-    public MaterialPropertyBlock blueNoteProperties;
-    public MaterialPropertyBlock redArrowProperties;
-    public MaterialPropertyBlock blueArrowProperties;
+    private readonly Dictionary<Material, SharedNoteMaterials> noteMaterials = new Dictionary<Material, SharedNoteMaterials>();
+    private readonly Dictionary<Material, SharedNoteMaterials> arrowMaterials = new Dictionary<Material, SharedNoteMaterials>();
 
     private Note firstLeftNote;
     private Note firstRightNote;
+
+    private bool materialCacheCurrent;
+    private bool cachedSimpleNoteMaterial;
+    private Color cachedRedNoteColor;
+    private Color cachedBlueNoteColor;
+    private float cachedNoteEmission;
+    private float cachedSimpleNoteSaturation;
+    private float cachedSimpleNoteEmission;
+    private float cachedArrowSaturation;
+    private float cachedArrowBrightness;
+    private float cachedArrowGlowSaturation;
+    private float cachedArrowEmission;
+
+
+    private class SharedNoteMaterials
+    {
+        public Material red;
+        public Material blue;
+    }
 
 
     public void ReloadNotes()
@@ -65,26 +80,208 @@ public class NoteManager : MapElementManager<Note>
     public void UpdateMaterials()
     {
         ClearRenderedVisuals();
-
-        SetNoteMaterialProperties(ref redNoteProperties, ref redArrowProperties, RedNoteColor);
-        SetNoteMaterialProperties(ref blueNoteProperties, ref blueArrowProperties, BlueNoteColor);
+        ClearSharedMaterialCache();
 
         UpdateVisuals();
     }
 
 
+    public void SetSharedMaterials(NoteHandler noteHandler, bool isRed)
+    {
+        Material noteMaterial = objectManager.useSimpleNoteMaterial ? simpleMaterial : complexMaterial;
+        noteHandler.SetSharedMaterials(
+            GetSharedMaterial(noteMaterials, noteMaterial, isRed, false),
+            GetSharedMaterial(arrowMaterials, noteHandler.BaseArrowMaterial, isRed, true),
+            GetSharedMaterial(arrowMaterials, noteHandler.BaseDotMaterial, isRed, true));
+    }
+
+
+    public void SetCustomMaterials(NoteHandler noteHandler)
+    {
+        noteHandler.SetCustomMaterials(objectManager.useSimpleNoteMaterial ? simpleMaterial : complexMaterial);
+    }
+
+
+    public void SetSharedMaterials(ChainLinkHandler chainLinkHandler, bool isRed)
+    {
+        Material noteMaterial = objectManager.useSimpleNoteMaterial ? simpleMaterial : complexMaterial;
+        chainLinkHandler.SetSharedMaterials(
+            GetSharedMaterial(noteMaterials, noteMaterial, isRed, false),
+            GetSharedMaterial(arrowMaterials, chainLinkHandler.BaseDotMaterial, isRed, true));
+    }
+
+
+    public void SetCustomMaterials(ChainLinkHandler chainLinkHandler)
+    {
+        chainLinkHandler.SetCustomMaterials(objectManager.useSimpleNoteMaterial ? simpleMaterial : complexMaterial);
+    }
+
+
+    public NoteHandler CreateWarmupVisual(Transform parent, Vector3 localPosition, bool useArrow)
+    {
+        Material material = objectManager.useSimpleNoteMaterial ? simpleMaterial : complexMaterial;
+        if(notePool == null || noteMesh == null || material == null)
+        {
+            return null;
+        }
+
+        NoteHandler noteHandler = notePool.GetObject();
+        noteHandler.transform.SetParent(parent);
+        noteHandler.transform.localPosition = localPosition;
+        noteHandler.transform.localRotation = Quaternion.identity;
+        noteHandler.transform.localScale = Vector3.one;
+        noteHandler.gameObject.SetActive(true);
+
+        noteHandler.SetMesh(noteMesh);
+        noteHandler.SetArrow(useArrow);
+        SetSharedMaterials(noteHandler, true);
+        noteHandler.SetOutline(false);
+        noteHandler.EnableVisual();
+
+        return noteHandler;
+    }
+
+
+    public void ReleaseWarmupVisual(NoteHandler noteHandler)
+    {
+        if(noteHandler == null)
+        {
+            return;
+        }
+
+        if(noteHandler.audioSource != null)
+        {
+            noteHandler.audioSource.Stop();
+        }
+        noteHandler.DisableVisual();
+        notePool.ReleaseObject(noteHandler);
+    }
+
+
     public void SetNoteMaterialProperties(ref MaterialPropertyBlock noteProperties, ref MaterialPropertyBlock arrowProperties, Color baseColor)
+    {
+        if(noteProperties == null) noteProperties = new MaterialPropertyBlock();
+        if(arrowProperties == null) arrowProperties = new MaterialPropertyBlock();
+
+        Color noteBaseColor, noteEmissionColor, arrowBaseColor, arrowEmissionColor;
+        GetMaterialColors(baseColor, out noteBaseColor, out noteEmissionColor, out arrowBaseColor, out arrowEmissionColor);
+
+        noteProperties.SetColor("_BaseColor", noteBaseColor);
+        noteProperties.SetColor("_EmissionColor", noteEmissionColor);
+
+        arrowProperties.SetColor("_BaseColor", arrowBaseColor);
+        arrowProperties.SetColor("_EmissionColor", arrowEmissionColor);
+    }
+
+
+    private Material GetSharedMaterial(Dictionary<Material, SharedNoteMaterials> materials, Material baseMaterial, bool isRed, bool isArrow)
+    {
+        if(baseMaterial == null)
+        {
+            return null;
+        }
+
+        EnsureMaterialCacheCurrent();
+
+        if(!materials.TryGetValue(baseMaterial, out SharedNoteMaterials sharedMaterials))
+        {
+            sharedMaterials = new SharedNoteMaterials();
+            materials[baseMaterial] = sharedMaterials;
+        }
+
+        Material material = isRed ? sharedMaterials.red : sharedMaterials.blue;
+        if(material == null)
+        {
+            material = new Material(baseMaterial);
+            SetMaterialProperties(material, isRed ? RedNoteColor : BlueNoteColor, isArrow);
+
+            if(isRed) sharedMaterials.red = material;
+            else sharedMaterials.blue = material;
+        }
+
+        return material;
+    }
+
+
+    private void SetMaterialProperties(Material material, Color baseColor, bool isArrow)
+    {
+        Color noteBaseColor, noteEmissionColor, arrowBaseColor, arrowEmissionColor;
+        GetMaterialColors(baseColor, out noteBaseColor, out noteEmissionColor, out arrowBaseColor, out arrowEmissionColor);
+
+        material.SetColor("_BaseColor", isArrow ? arrowBaseColor : noteBaseColor);
+        material.SetColor("_EmissionColor", isArrow ? arrowEmissionColor : noteEmissionColor);
+    }
+
+
+    private void GetMaterialColors(Color baseColor, out Color noteBaseColor, out Color noteEmissionColor, out Color arrowBaseColor, out Color arrowEmissionColor)
     {
         float h, s, v;
         Color.RGBToHSV(baseColor, out h, out s, out v);
 
         float saturation = objectManager.useSimpleNoteMaterial ? simpleNoteSaturation : 1f;
         float emission = objectManager.useSimpleNoteMaterial ? simpleNoteEmission : noteEmission;
-        noteProperties.SetColor("_BaseColor", baseColor.SetSaturation(saturation * s));
-        noteProperties.SetColor("_EmissionColor", baseColor.SetHSV(null, saturation * s, emission * v, true));
+        noteBaseColor = baseColor.SetSaturation(saturation * s);
+        noteEmissionColor = baseColor.SetHSV(null, saturation * s, emission * v, true);
 
-        arrowProperties.SetColor("_BaseColor", baseColor.SetHSV(null, arrowSaturation * s, arrowBrightness * v));
-        arrowProperties.SetColor("_EmissionColor", baseColor.SetHSV(null, arrowGlowSaturation * s, arrowEmission, true));
+        arrowBaseColor = baseColor.SetHSV(null, arrowSaturation * s, arrowBrightness * v);
+        arrowEmissionColor = baseColor.SetHSV(null, arrowGlowSaturation * s, arrowEmission, true);
+    }
+
+
+    private void ClearSharedMaterialCache()
+    {
+        ClearSharedMaterials(noteMaterials);
+        ClearSharedMaterials(arrowMaterials);
+        materialCacheCurrent = false;
+    }
+
+
+    private void ClearSharedMaterials(Dictionary<Material, SharedNoteMaterials> materials)
+    {
+        foreach(SharedNoteMaterials sharedMaterials in materials.Values)
+        {
+            if(sharedMaterials.red != null) Destroy(sharedMaterials.red);
+            if(sharedMaterials.blue != null) Destroy(sharedMaterials.blue);
+        }
+
+        materials.Clear();
+    }
+
+
+    private void EnsureMaterialCacheCurrent()
+    {
+        bool simpleNoteMaterial = objectManager.useSimpleNoteMaterial;
+        Color redNoteColor = RedNoteColor;
+        Color blueNoteColor = BlueNoteColor;
+
+        if(materialCacheCurrent
+            && cachedSimpleNoteMaterial == simpleNoteMaterial
+            && cachedRedNoteColor == redNoteColor
+            && cachedBlueNoteColor == blueNoteColor
+            && cachedNoteEmission == noteEmission
+            && cachedSimpleNoteSaturation == simpleNoteSaturation
+            && cachedSimpleNoteEmission == simpleNoteEmission
+            && cachedArrowSaturation == arrowSaturation
+            && cachedArrowBrightness == arrowBrightness
+            && cachedArrowGlowSaturation == arrowGlowSaturation
+            && cachedArrowEmission == arrowEmission)
+        {
+            return;
+        }
+
+        ClearSharedMaterialCache();
+
+        cachedSimpleNoteMaterial = simpleNoteMaterial;
+        cachedRedNoteColor = redNoteColor;
+        cachedBlueNoteColor = blueNoteColor;
+        cachedNoteEmission = noteEmission;
+        cachedSimpleNoteSaturation = simpleNoteSaturation;
+        cachedSimpleNoteEmission = simpleNoteEmission;
+        cachedArrowSaturation = arrowSaturation;
+        cachedArrowBrightness = arrowBrightness;
+        cachedArrowGlowSaturation = arrowGlowSaturation;
+        cachedArrowEmission = arrowEmission;
+        materialCacheCurrent = true;
     }
 
 
@@ -141,34 +338,34 @@ public class NoteManager : MapElementManager<Note>
         }
         Quaternion worldRotation = Quaternion.AngleAxis(angle, Vector3.forward);
 
+        Transform visualTransform;
         if(n.Visual == null)
         {
             n.NoteHandler = notePool.GetObject();
             n.Visual = n.NoteHandler.gameObject;
             n.source = n.NoteHandler.audioSource;
 
-            n.Visual.transform.SetParent(transform);
+            visualTransform = n.Visual.transform;
+            visualTransform.SetParent(transform);
             n.NoteHandler.EnableVisual();
 
             n.NoteHandler.SetMesh(n.IsChainHead ? chainHeadMesh : noteMesh);
             n.NoteHandler.SetArrow(!n.IsDot);
 
-            n.NoteHandler.SetMaterial(objectManager.useSimpleNoteMaterial ? simpleMaterial : complexMaterial);
             if(SettingsManager.GetBool("chromaobjectcolors") && n.CustomColor != null)
             {
                 //This note uses a unique chroma color
+                SetCustomMaterials(n.NoteHandler);
                 n.NoteHandler.SetProperties(n.CustomNoteProperties);
                 n.NoteHandler.SetArrowProperties(n.CustomArrowProperties);
             }
             else
             {
-                bool isRed = n.Color == 0;
-                n.NoteHandler.SetProperties(isRed ? redNoteProperties : blueNoteProperties);
-                n.NoteHandler.SetArrowProperties(isRed ? redArrowProperties : blueArrowProperties);
+                SetSharedMaterials(n.NoteHandler, n.Color == 0);
             }
 
             float noteSize = Mathf.Clamp(SettingsManager.GetFloat("notesize"), 0.5f, 1f);
-            n.Visual.transform.localScale = Vector3.one * noteSize;
+            visualTransform.localScale = Vector3.one * noteSize;
 
             n.Visual.SetActive(true);
             n.NoteHandler.EnableVisual();
@@ -194,15 +391,19 @@ public class NoteManager : MapElementManager<Note>
 
             RenderedObjects.Add(n);
         }
+        else
+        {
+            visualTransform = n.Visual.transform;
+        }
 
-        n.Visual.transform.localPosition = worldPos;
+        visualTransform.localPosition = worldPos;
 
         if(objectManager.doLookAnimation && !n.IsChainHead)
         {
             //Notes look towards the player's head in replays
             if(jumpProgress < 1f)
             {
-                n.Visual.transform.localRotation = objectManager.LookAtPlayer(n.Visual.transform.position, PlayerPositionManager.HeadPosition, worldRotation, jumpProgress);
+                visualTransform.localRotation = objectManager.LookAtPlayer(visualTransform.position, PlayerPositionManager.HeadPosition, worldRotation, jumpProgress);
             }
             else
             {
@@ -211,12 +412,12 @@ public class NoteManager : MapElementManager<Note>
                 Vector3 endRotationPosition = objectManager.ObjectSpaceToWorldSpace(n.Position);
                 endRotationPosition.z = n.EndHeadPosition.z + ObjectManager.PlayerCutPlaneDistance;
 
-                n.Visual.transform.localRotation = objectManager.LookAtPlayer(endRotationPosition, n.EndHeadPosition, worldRotation, jumpProgress);
+                visualTransform.localRotation = objectManager.LookAtPlayer(endRotationPosition, n.EndHeadPosition, worldRotation, jumpProgress);
             }
         }
         else
         {
-            n.Visual.transform.localRotation = worldRotation;
+            visualTransform.localRotation = worldRotation;
         }
     }
 
@@ -259,7 +460,7 @@ public class NoteManager : MapElementManager<Note>
                 else
                 {
                     ReleaseVisual(n);
-                    RenderedObjects.Remove(n);
+                    RenderedObjects.RemoveAt(i);
                 }
             }
             else if(n.ShouldShowVisual) n.NoteHandler.EnableVisual();
@@ -396,7 +597,12 @@ public class NoteManager : MapElementManager<Note>
         if(objectsOnBeat.Count == 0) return 0;
 
         //Need to recursively calculate the startYs of each note underneath
-        return objectsOnBeat.Max(x => GetStartY(x, objectsOnBeat)) + 1;
+        int maxStartY = 0;
+        for(int i = 0; i < objectsOnBeat.Count; i++)
+        {
+            maxStartY = Mathf.Max(maxStartY, GetStartY(objectsOnBeat[i], objectsOnBeat));
+        }
+        return maxStartY + 1;
     }
 
 
@@ -435,29 +641,57 @@ public class NoteManager : MapElementManager<Note>
 
     public static (float?, float?) GetSnapAngles(List<BeatmapColorNote> sameBeatNotes)
     {
-        List<BeatmapColorNote> redNotes = sameBeatNotes.Where(x => x.c == 0).ToList();
-        List<BeatmapColorNote> blueNotes = sameBeatNotes.Where(x => x.c == 1).ToList();
+        BeatmapColorNote firstRed = null;
+        BeatmapColorNote secondRed = null;
+        int redCount = 0;
+
+        BeatmapColorNote firstBlue = null;
+        BeatmapColorNote secondBlue = null;
+        int blueCount = 0;
+
+        for(int i = 0; i < sameBeatNotes.Count; i++)
+        {
+            BeatmapColorNote note = sameBeatNotes[i];
+            if(note.c == 0)
+            {
+                redCount++;
+                if(redCount == 1)
+                {
+                    firstRed = note;
+                }
+                else if(redCount == 2)
+                {
+                    secondRed = note;
+                }
+            }
+            else if(note.c == 1)
+            {
+                blueCount++;
+                if(blueCount == 1)
+                {
+                    firstBlue = note;
+                }
+                else if(blueCount == 2)
+                {
+                    secondBlue = note;
+                }
+            }
+        }
 
         //Returns the angle the notes should use to snap, or null if they shouldn't
         float? redDesiredAngle = null;
         float? blueDesiredAngle = null;
 
-        if(redNotes.Count == 2)
+        if(redCount == 2)
         {
             //Angle snapping requires exactly 2 notes
-            BeatmapColorNote first = redNotes[0];
-            BeatmapColorNote second = redNotes[1];
-
-            redDesiredAngle = GetAngleSnap(first, second);
+            redDesiredAngle = GetAngleSnap(firstRed, secondRed);
         }
 
-        if(blueNotes.Count == 2)
+        if(blueCount == 2)
         {
             //Angle snapping requires exactly 2 notes
-            BeatmapColorNote first = blueNotes[0];
-            BeatmapColorNote second = blueNotes[1];
-
-            blueDesiredAngle = GetAngleSnap(first, second);
+            blueDesiredAngle = GetAngleSnap(firstBlue, secondBlue);
         }
 
         return (redDesiredAngle, blueDesiredAngle);
@@ -553,12 +787,9 @@ public class NoteManager : MapElementManager<Note>
     }
 
 
-    private void Awake()
+    private void OnDestroy()
     {
-        redNoteProperties = new MaterialPropertyBlock();
-        blueNoteProperties = new MaterialPropertyBlock();
-        redArrowProperties = new MaterialPropertyBlock();
-        blueArrowProperties = new MaterialPropertyBlock();
+        ClearSharedMaterialCache();
     }
 }
 

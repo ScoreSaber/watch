@@ -2,10 +2,12 @@ using UnityEngine;
 
 public static class ReplaySourceHandler
 {
+    private const string StreamDelaySetting = "streamdelay";
+
     public static ReplayStreamingSocket Stream { get; private set; }
     public static bool IsStreaming { get; private set; }
 
-    public static float StreamDelay => Mathf.Clamp(SettingsManager.GetFloat("streamdelay"), 0.1f, 10f);
+    public static float StreamDelay => Mathf.Clamp(SettingsManager.GetFloat(StreamDelaySetting), 0.1f, 10f);
     public static float StreamPosition => IsStreaming ? Stream.StreamTime - StreamDelay : Mathf.Infinity;
 
 
@@ -35,6 +37,22 @@ public static class ReplaySourceHandler
     }
 
 
+    private static void UpdateSettings(string changedSetting)
+    {
+        if (changedSetting != "all" && changedSetting != StreamDelaySetting)
+        {
+            return;
+        }
+
+        if (!IsStreaming || Stream == null || !ReplayManager.IsReplayMode)
+        {
+            return;
+        }
+
+        SetLiveTimeAndPlay();
+    }
+
+
     public static void HandleStreamClosed(ReplayStreamingSocket closedStream)
     {
         if (closedStream != Stream)
@@ -45,6 +63,7 @@ public static class ReplaySourceHandler
         // Simply doing this *should* reset all state everywhere
         // (I don't really remember all this shit that well)
         UIStateManager.OnUIStateChanged -= UpdateUIState;
+        SettingsManager.OnSettingsUpdated -= UpdateSettings;
         UIStateManager.CurrentState = UIState.MapSelection;
     }
 
@@ -60,6 +79,8 @@ public static class ReplaySourceHandler
         IsStreaming = true;
         UIStateManager.OnUIStateChanged += UpdateUIState;
         BeatmapManager.OnBeatmapDifficultyChanged += UpdateDifficulty;
+        SettingsManager.OnSettingsUpdated -= UpdateSettings;
+        SettingsManager.OnSettingsUpdated += UpdateSettings;
     }
 
 
@@ -71,5 +92,6 @@ public static class ReplaySourceHandler
 
         UIStateManager.OnUIStateChanged -= UpdateUIState;
         BeatmapManager.OnBeatmapDifficultyChanged -= UpdateDifficulty;
+        SettingsManager.OnSettingsUpdated -= UpdateSettings;
     }
 }
