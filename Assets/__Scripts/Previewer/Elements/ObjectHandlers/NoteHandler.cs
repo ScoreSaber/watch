@@ -17,7 +17,30 @@ public class NoteHandler : MonoBehaviour
     private bool outline;
     private Color outlineColor;
 
+    private Material baseArrowMaterial;
+    private Material baseDotMaterial;
+
     private MaterialPropertyBlock outlineProperties;
+
+
+    public Material BaseArrowMaterial
+    {
+        get
+        {
+            if(baseArrowMaterial == null) baseArrowMaterial = arrowMeshRenderer.sharedMaterial;
+            return baseArrowMaterial;
+        }
+    }
+
+
+    public Material BaseDotMaterial
+    {
+        get
+        {
+            if(baseDotMaterial == null) baseDotMaterial = dotMeshRenderer.sharedMaterial;
+            return baseDotMaterial;
+        }
+    }
 
 
     public void SetMesh(Mesh newMesh)
@@ -27,9 +50,21 @@ public class NoteHandler : MonoBehaviour
     }
 
 
-    public void SetMaterial(Material newMaterial)
+    public void SetSharedMaterials(Material noteMaterial, Material arrowMaterial, Material dotMaterial)
     {
-        meshRenderer.sharedMaterial = newMaterial;
+        meshRenderer.sharedMaterial = noteMaterial;
+        arrowMeshRenderer.sharedMaterial = arrowMaterial;
+        dotMeshRenderer.sharedMaterial = dotMaterial;
+        ClearProperties();
+    }
+
+
+    public void SetCustomMaterials(Material noteMaterial)
+    {
+        meshRenderer.sharedMaterial = noteMaterial;
+        arrowMeshRenderer.sharedMaterial = BaseArrowMaterial;
+        dotMeshRenderer.sharedMaterial = BaseDotMaterial;
+        ClearProperties();
     }
 
 
@@ -49,6 +84,21 @@ public class NoteHandler : MonoBehaviour
         {
             dotMeshRenderer.SetPropertyBlock(propertyBlock);
         }
+    }
+
+
+    private void ClearProperties()
+    {
+        meshRenderer.SetPropertyBlock(null);
+        arrowMeshRenderer.SetPropertyBlock(null);
+        dotMeshRenderer.SetPropertyBlock(null);
+    }
+
+
+    private void Awake()
+    {
+        baseArrowMaterial = arrowMeshRenderer.sharedMaterial;
+        baseDotMaterial = dotMeshRenderer.sharedMaterial;
     }
 
 

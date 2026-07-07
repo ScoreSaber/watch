@@ -1,8 +1,11 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 public class MistakeIconHandler : MonoBehaviour
 {
+    private const int DeferredIconGenerationFrames = 2;
+
     [SerializeField] private MistakeIcon iconPrefab;
     [SerializeField] private RectTransform iconParent;
 
@@ -30,7 +33,11 @@ public class MistakeIconHandler : MonoBehaviour
     [SerializeField] private string failTooltip;
 
     private List<MistakeIcon> icons = new List<MistakeIcon>();
+    private readonly List<MistakeIcon> iconPool = new List<MistakeIcon>();
     private Canvas parentCanvas;
+    private bool mistakeIcons;
+    private int iconGenerationRequest;
+    private Coroutine iconGenerationCoroutine;
 
 
     private string GetTimeString(float time)
@@ -101,6 +108,28 @@ public class MistakeIconHandler : MonoBehaviour
     }
 
 
+    private MistakeIcon CreateIcon()
+    {
+        MistakeIcon newIcon;
+        if(iconPool.Count > 0)
+        {
+            int lastIconIndex = iconPool.Count - 1;
+            newIcon = iconPool[lastIconIndex];
+            iconPool.RemoveAt(lastIconIndex);
+            newIcon.transform.SetParent(iconParent, false);
+            newIcon.transform.SetAsLastSibling();
+            newIcon.gameObject.SetActive(true);
+        }
+        else
+        {
+            newIcon = Instantiate(iconPrefab, iconParent, false);
+        }
+
+        icons.Add(newIcon);
+        return newIcon;
+    }
+
+
     private void GenerateIcons()
     {
         ClearIcons();
@@ -110,7 +139,7 @@ public class MistakeIconHandler : MonoBehaviour
             return;
         }
 
-        if(!SettingsManager.GetBool("mistakeicons"))
+        if(!mistakeIcons)
         {
             return;
         }
@@ -124,43 +153,82 @@ public class MistakeIconHandler : MonoBehaviour
                 continue;
             }
 
-            MistakeIcon newIcon = Instantiate(iconPrefab, iconParent, false);
+            MistakeIcon newIcon = CreateIcon();
 
             SetIconProperties(ref newIcon, scoringEvent);
-            icons.Add(newIcon);
         }
 
         foreach(Pause pauseEvent in ReplayManager.CurrentReplay.pauses)
         {
-            MistakeIcon newIcon = Instantiate(iconPrefab, iconParent, false);
+            MistakeIcon newIcon = CreateIcon();
 
             SetPauseIconProperties(ref newIcon, pauseEvent);
-            icons.Add(newIcon);
         }
 
         if(ReplayManager.Failed)
         {
-            MistakeIcon newIcon = Instantiate(iconPrefab, iconParent, false);
+            MistakeIcon newIcon = CreateIcon();
 
             SetFailIconProperties(ref newIcon, ReplayManager.FailTime);
-            icons.Add(newIcon);
         }
+    }
+
+
+    private void ScheduleIconGeneration()
+    {
+        iconGenerationRequest++;
+        if(iconGenerationCoroutine != null)
+        {
+            StopCoroutine(iconGenerationCoroutine);
+        }
+
+        iconGenerationCoroutine = StartCoroutine(GenerateIconsDeferred(iconGenerationRequest));
+    }
+
+
+    private void CancelScheduledIconGeneration()
+    {
+        iconGenerationRequest++;
+        if(iconGenerationCoroutine != null)
+        {
+            StopCoroutine(iconGenerationCoroutine);
+            iconGenerationCoroutine = null;
+        }
+    }
+
+
+    private IEnumerator GenerateIconsDeferred(int request)
+    {
+        for(int i = 0; i < DeferredIconGenerationFrames; i++)
+        {
+            yield return null;
+        }
+
+        if(request != iconGenerationRequest)
+        {
+            yield break;
+        }
+
+        iconGenerationCoroutine = null;
+        GenerateIcons();
     }
 
 
     private void ClearIcons()
     {
-        for(int i = icons.Count - 1; i >= 0; i--)
+        for(int i = 0; i < icons.Count; i++)
         {
-            icons[i].gameObject.SetActive(false);
-            Destroy(icons[i].gameObject);
-            icons.Remove(icons[i]);
+            MistakeIcon icon = icons[i];
+            icon.gameObject.SetActive(false);
+            iconPool.Add(icon);
         }
+        icons.Clear();
     }
 
 
     private void UpdateReplayMode(bool replayMode)
     {
+        CancelScheduledIconGeneration();
         GenerateIcons();
     }
 
@@ -169,12 +237,14 @@ public class MistakeIconHandler : MonoBehaviour
     {
         if(setting == "all" || setting == "mistakeicons")
         {
+            mistakeIcons = SettingsManager.Loaded && SettingsManager.GetBool("mistakeicons");
+            CancelScheduledIconGeneration();
             GenerateIcons();
         }
     }
 
 
-    private void UpdateDifficulty(Difficulty newDifficulty) => GenerateIcons();
+    private void UpdateDifficulty(Difficulty newDifficulty) => ScheduleIconGeneration();
 
 
     private void OnEnable()
@@ -188,12 +258,17 @@ public class MistakeIconHandler : MonoBehaviour
         SettingsManager.OnSettingsUpdated += UpdateSettings;
         BeatmapManager.OnBeatmapDifficultyChanged += UpdateDifficulty;
 
-        GenerateIcons();
+        UpdateSettings("all");
     }
 
 
     private void OnDisable()
     {
+        ReplayManager.OnReplayModeChanged -= UpdateReplayMode;
+        SettingsManager.OnSettingsUpdated -= UpdateSettings;
+        BeatmapManager.OnBeatmapDifficultyChanged -= UpdateDifficulty;
+
+        CancelScheduledIconGeneration();
         ClearIcons();
     }
 }

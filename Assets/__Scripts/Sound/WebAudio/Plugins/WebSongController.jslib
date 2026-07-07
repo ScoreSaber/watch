@@ -42,10 +42,7 @@ var SongController = {
 
     UploadSongData: function (data, dataLength, isOgg, gameObjectName, methodName) {
         //Convert the C# byte[] to an arraybuffer for audio decoding
-        const byteArray = new Uint8Array(dataLength);
-        for (var i = 0; i < dataLength; i++) {
-            byteArray[i] = HEAPU8[data + i];
-        }
+        const byteArray = HEAPU8.slice(data, data + dataLength);
 
         gameObjectName = UTF8ToString(gameObjectName);
         methodName = UTF8ToString(methodName);

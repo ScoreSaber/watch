@@ -31,30 +31,91 @@ var HitSoundController = {
 
         this.hitSoundBuffers = [];
         this.badHitSoundBuffers = [];
+        this.hitSoundFetches = [];
+        this.badHitSoundFetches = [];
 
-        //Load the hitsound audio
-        for (let i = 0; i < hitSoundNames.length; i++) {
-            fetch("TemplateData/SFX/Hitsounds/" + hitSoundNames[i] + ".wav")
+        this.loadHitSoundBuffer = (i) => {
+            if (i < 0 || i >= hitSoundNames.length) {
+                return;
+            }
+
+            if (typeof this.hitSoundBuffers[i] !== 'undefined') {
+                if (i == this.hitSoundIndex) {
+                    this.hitAudio = this.hitSoundBuffers[i];
+                }
+                return;
+            }
+
+            if (typeof this.hitSoundFetches[i] !== 'undefined') {
+                return;
+            }
+
+            this.hitSoundFetches[i] = fetch("TemplateData/SFX/Hitsounds/" + hitSoundNames[i] + ".wav")
                 .then((res) => res.arrayBuffer())
                 .then((buffer) => AudioCtx.decodeAudioData(buffer))
                 .then((buffer) => {
                     this.hitSoundBuffers[i] = buffer;
+                    delete this.hitSoundFetches[i];
                     if (i == this.hitSoundIndex) {
-                        this.hitAudio = this.hitSoundBuffers[i];
+                        this.hitAudio = buffer;
                     }
                 })
-        }
-        for (let i = 0; i < badHitSoundNames.length; i++) {
-            fetch("TemplateData/SFX/BadHitsounds/" + badHitSoundNames[i] + ".wav")
+                .catch(() => {
+                    delete this.hitSoundFetches[i];
+                });
+        };
+
+        this.loadBadHitSoundBuffer = (i) => {
+            if (i < 0 || i >= badHitSoundNames.length) {
+                return;
+            }
+
+            if (typeof this.badHitSoundBuffers[i] !== 'undefined') {
+                if (i == this.badHitSoundIndex) {
+                    this.badHitAudio = this.badHitSoundBuffers[i];
+                }
+                return;
+            }
+
+            if (typeof this.badHitSoundFetches[i] !== 'undefined') {
+                return;
+            }
+
+            this.badHitSoundFetches[i] = fetch("TemplateData/SFX/BadHitsounds/" + badHitSoundNames[i] + ".wav")
                 .then((res) => res.arrayBuffer())
                 .then((buffer) => AudioCtx.decodeAudioData(buffer))
                 .then((buffer) => {
                     this.badHitSoundBuffers[i] = buffer;
+                    delete this.badHitSoundFetches[i];
                     if (i == this.badHitSoundIndex) {
-                        this.badHitAudio = this.badHitSoundBuffers[i];
+                        this.badHitAudio = buffer;
                     }
                 })
-        }
+                .catch(() => {
+                    delete this.badHitSoundFetches[i];
+                });
+        };
+
+        this.getSilentHitSoundBuffer = () => {
+            if (typeof this.silentHitSoundBuffer === 'undefined') {
+                this.silentHitSoundBuffer = AudioCtx.createBuffer(1, AudioCtx.sampleRate, AudioCtx.sampleRate);
+            }
+            return this.silentHitSoundBuffer;
+        };
+
+        this.getHitSoundBuffer = (badCut) => {
+            if (badCut) {
+                this.loadBadHitSoundBuffer(this.badHitSoundIndex);
+                return this.badHitAudio;
+            }
+
+            this.loadHitSoundBuffer(this.hitSoundIndex);
+            return this.hitAudio;
+        };
+
+        //load only the currently selected audio. other choices are fetched on demand
+        this.loadHitSoundBuffer(this.hitSoundIndex);
+        this.loadBadHitSoundBuffer(this.badHitSoundIndex);
 
         if (typeof this.hitSoundGain === 'undefined') {
             this.hitSoundGain = AudioCtx.createGain();
@@ -100,18 +161,24 @@ var HitSoundController = {
 
     SetHitSound: function (hitSound) {
         this.hitSoundIndex = hitSound;
-        if (typeof this.hitSoundBuffers !== 'undefined' && this.hitSoundBuffers.length > hitSound) {
-            //Only update the buffer if the hitsounds are initialized
-            //otherwise the hitsound will automatically be picked on init
+        if (typeof this.loadHitSoundBuffer !== 'undefined') {
+            this.loadHitSoundBuffer(hitSound);
+        }
+        if (typeof this.hitSoundBuffers !== 'undefined' && typeof this.hitSoundBuffers[hitSound] !== 'undefined') {
+            //only update the buffer if it is already initialized
+            //otherwise the hitsound will automatically be picked when loaded
             this.hitAudio = this.hitSoundBuffers[hitSound];
         }
     },
 
     SetBadHitSound: function (badHitSound) {
         this.badHitSoundIndex = badHitSound;
-        if (typeof this.badHitSoundBuffers !== 'undefined' && this.badHitSoundBuffers.length > badHitSound) {
-            //Only update the buffer if the hitsounds are initialized
-            //otherwise the hitsound will automatically be picked on init
+        if (typeof this.loadBadHitSoundBuffer !== 'undefined') {
+            this.loadBadHitSoundBuffer(badHitSound);
+        }
+        if (typeof this.badHitSoundBuffers !== 'undefined' && typeof this.badHitSoundBuffers[badHitSound] !== 'undefined') {
+            //only update the buffer if it is already initialized
+            //otherwise the hitsound will automatically be picked when loaded
             this.badHitAudio = this.badHitSoundBuffers[badHitSound];
         }
     },
@@ -178,7 +245,8 @@ var HitSoundController = {
 
         //Create a new audio source for this hitsound
         const newNode = AudioCtx.createBufferSource();
-        newNode.buffer = hitSound.isBadCut ? this.badHitAudio : this.hitAudio;
+        const audioBuffer = this.getHitSoundBuffer(hitSound.isBadCut);
+        newNode.buffer = typeof audioBuffer !== 'undefined' ? audioBuffer : this.getSilentHitSoundBuffer();
         newNode.playbackRate.value = hitSound.speed;
         if (!hitSound.isChainLink) {
             newNode.connect(this.hitSoundGain);
@@ -217,7 +285,8 @@ var HitSoundController = {
     AddHitSound: function (id, badCut, chainLink, playTime, pitch) {
         //Create the audio node and connect it to the destination
         const newNode = AudioCtx.createBufferSource();
-        newNode.buffer = badCut ? this.badHitAudio : this.hitAudio;
+        const audioBuffer = this.getHitSoundBuffer(badCut);
+        newNode.buffer = typeof audioBuffer !== 'undefined' ? audioBuffer : this.getSilentHitSoundBuffer();
         newNode.playbackRate.value = pitch; 
 
         if (!chainLink) {

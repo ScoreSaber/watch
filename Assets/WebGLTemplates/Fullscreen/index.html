@@ -42,6 +42,34 @@
 
     document.querySelector("#unity-loading-bar").style.display = "block";
 
+    function SkipDeprecatedFirefoxRendererInfo() {
+      if (!/\bFirefox\//.test(navigator.userAgent)) return;
+
+      var patchedContexts = [];
+
+      function patchContext(contextType) {
+        if (!contextType) return;
+        if (patchedContexts.indexOf(contextType.prototype) !== -1) return;
+
+        var getExtension = contextType.prototype.getExtension;
+        if (!getExtension) return;
+
+        function patchedGetExtension(name) {
+          if (name === "WEBGL_debug_renderer_info") return null;
+
+          return getExtension.apply(this, arguments);
+        }
+
+        contextType.prototype.getExtension = patchedGetExtension;
+        patchedContexts.push(contextType.prototype);
+      }
+
+      patchContext(window.WebGLRenderingContext);
+      patchContext(window.WebGL2RenderingContext);
+    }
+
+    SkipDeprecatedFirefoxRendererInfo();
+
     var gameInstance = null;
     createUnityInstance(document.querySelector("#unity-canvas"), {
       dataUrl: "Build/{{{ DATA_FILENAME }}}",
@@ -59,6 +87,7 @@
       companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
       productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
       productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+      autoSyncPersistentDataPath: true,
         // matchWebGLToCanvasSize: false, // Uncomment this to separately control WebGL canvas render size and DOM element size.
         // devicePixelRatio: 1, // Uncomment this to override low DPI rendering on high DPI displays.
       }, (progress) => {

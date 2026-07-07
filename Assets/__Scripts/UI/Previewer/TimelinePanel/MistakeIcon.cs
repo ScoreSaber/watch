@@ -84,6 +84,7 @@ public class MistakeIcon : MonoBehaviour, IPointerEnterHandler, IPointerExitHand
     private void OnEnable()
     {
         rectTransform.sizeDelta = new Vector2(normalSize, normalSize);
+        image.raycastPadding = Vector4.zero;
         ScreenSizeHelper.OnScreenSizeChanged += UpdatePosition;
     }
 

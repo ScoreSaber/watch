@@ -36,6 +36,39 @@ public class WallManager : MapElementManager<Wall>
     }
 
 
+    public WallHandler CreateWarmupVisual(Transform parent, Vector3 localPosition)
+    {
+        if(wallPool == null)
+        {
+            return null;
+        }
+
+        WallHandler wallHandler = wallPool.GetObject();
+        wallHandler.transform.SetParent(parent);
+        wallHandler.transform.localPosition = localPosition;
+        wallHandler.transform.localRotation = Quaternion.identity;
+        wallHandler.transform.localScale = Vector3.one;
+        wallHandler.gameObject.SetActive(true);
+
+        wallHandler.SetColor(WallColor);
+        wallHandler.SetAlpha(Mathf.Clamp01(SettingsManager.GetFloat("wallopacity")));
+        wallHandler.SetScale(new Vector3(ObjectManager.LaneWidth, ObjectManager.RowHeight * 2, 1f));
+
+        return wallHandler;
+    }
+
+
+    public void ReleaseWarmupVisual(WallHandler wallHandler)
+    {
+        if(wallHandler == null)
+        {
+            return;
+        }
+
+        wallPool.ReleaseObject(wallHandler);
+    }
+
+
     public override void UpdateVisual(Wall w)
     {
         float reactionTime = w.CustomRT ?? jumpManager.ReactionTime;
@@ -51,12 +84,14 @@ public class WallManager : MapElementManager<Wall>
         float frontDist = jumpManager.GetZPosition(w.Time, njs, reactionTime, halfJumpDistance) - 0.25f;
         float worldDist = frontDist + (wallLength / 2);
 
+        Transform visualTransform;
         if(w.Visual == null)
         {
             w.WallHandler = wallPool.GetObject();
             w.Visual = w.WallHandler.gameObject;
 
-            w.Visual.transform.SetParent(wallParent.transform);
+            visualTransform = w.Visual.transform;
+            visualTransform.SetParent(wallParent.transform);
             w.Visual.SetActive(true);
 
             if(SettingsManager.GetBool("chromaobjectcolors") && w.CustomColor != null)
@@ -71,6 +106,10 @@ public class WallManager : MapElementManager<Wall>
             w.WallHandler.SetAlpha(Mathf.Clamp01(SettingsManager.GetFloat("wallopacity")));
 
             RenderedObjects.Add(w);
+        }
+        else
+        {
+            visualTransform = w.Visual.transform;
         }
 
         Vector3 worldPos = new Vector3(w.Position.x, w.Position.y, worldDist);
@@ -99,7 +138,7 @@ public class WallManager : MapElementManager<Wall>
             }
         }
 
-        w.Visual.transform.localPosition = worldPos;
+        visualTransform.localPosition = worldPos;
         w.WallHandler.SetScale(worldScale);
     }
 

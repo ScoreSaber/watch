@@ -37,7 +37,6 @@ Shader "Custom/Bloomfog/BoxBlurShader"
             float4 _MainTex_ST;
 
             uniform float _BlurAlpha;
-            uniform float _Offset;
 
             v2f vert (appdata v)
             {
@@ -55,37 +54,19 @@ Shader "Custom/Bloomfog/BoxBlurShader"
             fixed4 frag (v2f input) : SV_Target
             {
                 float2 res = _MainTex_TexelSize.xy;
-                float i = _Offset;
 
-                fixed4 col = tex2D(_MainTex, input.uv + float2(-2, -2) * res);
-                col.rgb += tex2D(_MainTex, input.uv + float2(-1, -2) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(0, -2) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(1, -2) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(2, -2) * res).rgb;
+                fixed4 col = 0;
+                col.rgb += tex2D(_MainTex, input.uv + float2(-1.5, -1.5) * res).rgb * 4;
+                col.rgb += tex2D(_MainTex, input.uv + float2(0, -1.5) * res).rgb * 2;
+                col.rgb += tex2D(_MainTex, input.uv + float2(1.5, -1.5) * res).rgb * 4;
 
-                col.rgb += tex2D(_MainTex, input.uv + float2(-2, -1) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(-1, -1) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(0, -1) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(1, -1) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(2, -1) * res).rgb;
-
-                col.rgb += tex2D(_MainTex, input.uv + float2(-2, 0) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(-1, 0) * res).rgb;
+                col.rgb += tex2D(_MainTex, input.uv + float2(-1.5, 0) * res).rgb * 2;
                 col.rgb += tex2D(_MainTex, input.uv + float2(0, 0) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(1, 0) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(2, 0) * res).rgb;
+                col.rgb += tex2D(_MainTex, input.uv + float2(1.5, 0) * res).rgb * 2;
 
-                col.rgb += tex2D(_MainTex, input.uv + float2(-2, 1) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(-1, 1) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(0, 1) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(1, 1) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(2, 1) * res).rgb;
-
-                col.rgb += tex2D(_MainTex, input.uv + float2(-2, 2) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(-1, 2) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(0, 2) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(1, 2) * res).rgb;
-                col.rgb += tex2D(_MainTex, input.uv + float2(2, 2) * res).rgb;
+                col.rgb += tex2D(_MainTex, input.uv + float2(-1.5, 1.5) * res).rgb * 4;
+                col.rgb += tex2D(_MainTex, input.uv + float2(0, 1.5) * res).rgb * 2;
+                col.rgb += tex2D(_MainTex, input.uv + float2(1.5, 1.5) * res).rgb * 4;
 
                 col.rgb /= 25;
                 col.a = _BlurAlpha;

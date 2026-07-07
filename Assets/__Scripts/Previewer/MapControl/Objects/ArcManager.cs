@@ -1,4 +1,3 @@
-using System.Linq;
 using UnityEngine;
 
 public class ArcManager : MapElementManager<Arc>
@@ -52,17 +51,82 @@ public class ArcManager : MapElementManager<Arc>
     {
         ClearRenderedVisuals();
 
+        SetArcMaterialProperties(BeatmapManager.HalfJumpDistance);
+
+        UpdateVisuals();
+    }
+
+
+    public void PrepareWarmupMaterialProperties()
+    {
+        SetArcMaterialProperties(Mathf.Max(BeatmapManager.HalfJumpDistance, 1f));
+    }
+
+
+    private void SetArcMaterialProperties(float halfJumpDistance)
+    {
+        if(redArcMaterialProperties == null) redArcMaterialProperties = new MaterialPropertyBlock();
+        if(blueArcMaterialProperties == null) blueArcMaterialProperties = new MaterialPropertyBlock();
+
         //Sets the distance that arcs should fade out
         const float fadeDistMultiplier = 0.8f;
-        float fadeDist = BeatmapManager.HalfJumpDistance * fadeDistMultiplier;
+        float fadeDist = halfJumpDistance * fadeDistMultiplier;
 
         redArcMaterialProperties.SetFloat("_FadeEndPoint", fadeDist);
         redArcMaterialProperties.SetFloat("_FadeTransitionLength", arcFadeTransitionLength);
 
         blueArcMaterialProperties.SetFloat("_FadeEndPoint", fadeDist);
         blueArcMaterialProperties.SetFloat("_FadeTransitionLength", arcFadeTransitionLength);
+    }
 
-        UpdateVisuals();
+
+    public ArcHandler CreateWarmupVisual(Transform parent, Vector3 localPosition)
+    {
+        if(arcPool == null || arcMaterial == null)
+        {
+            return null;
+        }
+
+        PrepareWarmupMaterialProperties();
+
+        ArcHandler arcHandler = arcPool.GetObject();
+        arcHandler.transform.SetParent(parent);
+        arcHandler.transform.localPosition = localPosition;
+        arcHandler.transform.localRotation = Quaternion.identity;
+        arcHandler.transform.localScale = Vector3.one;
+        arcHandler.gameObject.SetActive(true);
+
+        Vector3[] points =
+        {
+            new Vector3(-0.3f, -0.15f, 0f),
+            new Vector3(0f, 0.2f, 1f),
+            new Vector3(0.3f, -0.15f, 2f)
+        };
+
+        float width = Mathf.Clamp01(SettingsManager.GetFloat("arcwidth")) / 2;
+        if(width <= 0f)
+        {
+            width = 0.05f;
+        }
+
+        arcHandler.SetMaterial(arcMaterial, redArcMaterialProperties);
+        arcHandler.SetArcPoints(points);
+        arcHandler.SetGradient(2f, arcEndFadeStart, arcEndFadeEnd);
+        arcHandler.SetWidth(width);
+        arcHandler.SetProperties(Mathf.Max(0.1f, Mathf.Clamp(SettingsManager.GetFloat("arcbrightness"), 0f, 2f)), 0.5f, redArcColor, objectManager.CutPlanePos);
+
+        return arcHandler;
+    }
+
+
+    public void ReleaseWarmupVisual(ArcHandler arcHandler)
+    {
+        if(arcHandler == null)
+        {
+            return;
+        }
+
+        arcPool.ReleaseObject(arcHandler);
     }
 
 
@@ -144,12 +208,16 @@ public class ArcManager : MapElementManager<Arc>
             float headOffsetY = jumpManager.GetObjectY(headStartY, a.Position.y, zDist, halfJumpDistance, a.Time, reactionTime) - a.Position.y;
             float tailOffsetY = jumpManager.GetObjectY(tailStartY, a.TailPosition.y, tailZDist, halfJumpDistance, a.TailTime, reactionTime) - a.TailPosition.y;
 
-            a.arcHandler.SetArcPoints(GetAdjustedArcCurve(a.BaseCurve, headOffsetY, tailOffsetY, njsMult));
+            Vector3[] arcCurve = a.GetRenderCurveBuffer(a.BaseCurve.Length);
+            GetAdjustedArcCurve(a.BaseCurve, arcCurve, headOffsetY, tailOffsetY, njsMult);
+            a.arcHandler.SetArcPoints(arcCurve, a.BaseCurve.Length);
         }
         else
         {
             //The arc curve still needs to be squashed because of variable NJS
-            a.arcHandler.SetArcPoints(GetSquishedArcCurve(a.BaseCurve, njsMult));
+            Vector3[] arcCurve = a.GetRenderCurveBuffer(a.BaseCurve.Length);
+            GetSquishedArcCurve(a.BaseCurve, arcCurve, njsMult);
+            a.arcHandler.SetArcPoints(arcCurve, a.BaseCurve.Length);
         }
 
         a.Visual.transform.localPosition = new Vector3(0, objectManager.playerHeightOffset, zDist);
@@ -345,29 +413,24 @@ public class ArcManager : MapElementManager<Arc>
     }
 
 
-    public static Vector3[] GetSquishedArcCurve(Vector3[] baseCurve, float lengthMult)
+    public static void GetSquishedArcCurve(Vector3[] baseCurve, Vector3[] points, float lengthMult)
     {
-        Vector3[] points = new Vector3[baseCurve.Length];
         for(int i = 0; i < baseCurve.Length; i++)
         {
             Vector3 point = baseCurve[i];
             point.z *= lengthMult;
             points[i] = point;
         }
-
-        return points;
     }
 
 
-    public static Vector3[] GetAdjustedArcCurve(Vector3[] baseCurve, float headOffsetY, float tailOffsetY, float lengthMult)
+    public static void GetAdjustedArcCurve(Vector3[] baseCurve, Vector3[] points, float headOffsetY, float tailOffsetY, float lengthMult)
     {
-        if(baseCurve.Length == 0) return baseCurve;
+        if(baseCurve.Length == 0) return;
 
-        float arcLength = baseCurve.Last().z;
+        float arcLength = baseCurve[^1].z;
         float JD = BeatmapManager.HalfJumpDistance;
 
-        //Create a new curve here so we don't overwrite the input
-        Vector3[] points = new Vector3[baseCurve.Length];
         for(int i = 0; i < baseCurve.Length; i++)
         {
             Vector3 point = baseCurve[i];
@@ -391,8 +454,6 @@ public class ArcManager : MapElementManager<Arc>
 
             points[i] = point;
         }
-
-        return points;
     }
 
 
@@ -420,12 +481,29 @@ public class Arc : BaseSlider
     public ArcRotationDirection MidRotationDirection;
 
     public ArcHandler arcHandler;
+    private Vector3[] renderCurveBuffer;
 
 
     public void CalculateBaseCurve()
     {
         BaseCurve = ArcManager.GetArcBaseCurve(this);
         CurveLength = ArcManager.GetCurveLength(BaseCurve);
+    }
+
+
+    public Vector3[] GetRenderCurveBuffer(int pointCount)
+    {
+        if(pointCount == 0)
+        {
+            return BaseCurve;
+        }
+
+        if(renderCurveBuffer == null || renderCurveBuffer.Length < pointCount)
+        {
+            renderCurveBuffer = new Vector3[pointCount];
+        }
+
+        return renderCurveBuffer;
     }
 
 

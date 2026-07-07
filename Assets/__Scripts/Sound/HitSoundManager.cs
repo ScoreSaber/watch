@@ -13,10 +13,82 @@ public class HitSoundManager : MonoBehaviour
     public static List<ScheduledSound> scheduledSounds = new List<ScheduledSound>();
 #endif
 
-    public static bool RandomPitch => SettingsManager.GetBool("randomhitsoundpitch");
-    public static bool Spatial => SettingsManager.GetBool("spatialhitsounds");
-    public static float ScheduleBuffer => Mathf.Clamp(SettingsManager.GetFloat("hitsoundbuffer", false), 0f, 0.5f);
-    public static bool DynamicPriority => SettingsManager.GetBool("dynamicsoundpriority", false);
+    public static bool RandomPitch
+    {
+        get
+        {
+            EnsureSettingsCached();
+            return randomPitch;
+        }
+    }
+
+    public static bool Spatial
+    {
+        get
+        {
+            EnsureSettingsCached();
+            return spatial;
+        }
+    }
+
+    public static float ScheduleBuffer
+    {
+        get
+        {
+            EnsureSettingsCached();
+            return scheduleBuffer;
+        }
+    }
+
+    public static bool DynamicPriority
+    {
+        get
+        {
+            EnsureSettingsCached();
+            return dynamicPriority;
+        }
+    }
+
+    public static bool HitSoundsEnabled
+    {
+        get
+        {
+            EnsureSettingsCached();
+            return hitSoundsEnabled;
+        }
+    }
+
+    public static bool ChainSoundsEnabled
+    {
+        get
+        {
+            EnsureSettingsCached();
+            return chainSoundsEnabled;
+        }
+    }
+
+    private static readonly string[] cachedSettings = new string[]
+    {
+        "randomhitsoundpitch",
+        "spatialhitsounds",
+        "hitsoundbuffer",
+        "dynamicsoundpriority",
+        "enablehitsound",
+        "hitsoundvolume",
+        "chainvolume",
+        "mutemisses",
+        "usebadhitsound"
+    };
+
+    private static bool randomPitch;
+    private static bool spatial;
+    private static float scheduleBuffer;
+    private static bool dynamicPriority;
+    private static bool hitSoundsEnabled;
+    private static bool chainSoundsEnabled;
+    private static bool muteMisses;
+    private static bool useBadHitSound;
+    private static bool settingsCached;
 
 #if !UNITY_WEBGL || UNITY_EDITOR
     public float HitSoundVolume
@@ -53,9 +125,53 @@ public class HitSoundManager : MonoBehaviour
 #endif
 
 
+    private static void EnsureSettingsCached()
+    {
+        if(settingsCached || !SettingsManager.Loaded)
+        {
+            return;
+        }
+
+        UpdateSettings("all");
+    }
+
+
+    private static void UpdateSettings(string setting)
+    {
+        if(!SettingsManager.Loaded)
+        {
+            settingsCached = false;
+            return;
+        }
+
+        if(setting != "all" && !cachedSettings.Contains(setting))
+        {
+            return;
+        }
+
+        randomPitch = SettingsManager.GetBool("randomhitsoundpitch");
+        spatial = SettingsManager.GetBool("spatialhitsounds");
+        scheduleBuffer = Mathf.Clamp(SettingsManager.GetFloat("hitsoundbuffer", false), 0f, 0.5f);
+        dynamicPriority = SettingsManager.GetBool("dynamicsoundpriority", false);
+        muteMisses = SettingsManager.GetBool("mutemisses");
+        useBadHitSound = SettingsManager.GetBool("usebadhitsound");
+
+        hitSoundsEnabled = SettingsManager.GetBool("enablehitsound") && SettingsManager.GetFloat("hitsoundvolume") > 0f;
+        chainSoundsEnabled = hitSoundsEnabled && SettingsManager.GetFloat("chainvolume") > 0f;
+        settingsCached = true;
+    }
+
+
     public static void ScheduleHitsound(HitSoundEmitter emitter)
     {
-        if(!emitter.WasHit && !emitter.WasBadCut && SettingsManager.GetBool("mutemisses"))
+        EnsureSettingsCached();
+
+        if(!hitSoundsEnabled || (emitter.GetType() == typeof(ChainLink) && !chainSoundsEnabled))
+        {
+            return;
+        }
+
+        if(!emitter.WasHit && !emitter.WasBadCut && muteMisses)
         {
             //This note was missed and shouldn't play a sound
             return;
@@ -68,19 +184,19 @@ public class HitSoundManager : MonoBehaviour
         source.Stop();
         source.volume = 1f;
 
-        if(RandomPitch)
+        if(randomPitch)
         {
             source.pitch = Random.Range(0.95f, 1.05f);
         }
         else source.pitch = 1f;
 
-        if(emitter.WasBadCut && SettingsManager.GetBool("usebadhitsound"))
+        if(emitter.WasBadCut && useBadHitSound)
         {
             source.clip = BadHitSound;
         }
         else source.clip = HitSound;
         
-        if(Spatial)
+        if(spatial)
         {
             const float spread = 120f;
 
@@ -124,10 +240,10 @@ public class HitSoundManager : MonoBehaviour
         };
         scheduledSounds.Add(sound);
 #else
-        bool badCut = emitter.WasBadCut && SettingsManager.GetBool("usebadhitsound");
+        bool badCut = emitter.WasBadCut && useBadHitSound;
         bool chainLink = emitter.GetType() == typeof(ChainLink);
         float time = emitter.GetType() == typeof(Bomb) ? emitter.Time - emitter.HitOffset : emitter.Time;
-        float pitch = RandomPitch ? Random.Range(0.95f, 1.05f) : 1f;
+        float pitch = randomPitch ? Random.Range(0.95f, 1.05f) : 1f;
 
         WebHitSoundController.CreateHitSound(badCut, chainLink, time, pitch);
 #endif
@@ -194,6 +310,10 @@ public class HitSoundManager : MonoBehaviour
 
     private void Start()
     {
+        SettingsManager.OnSettingsUpdated -= UpdateSettings;
+        SettingsManager.OnSettingsUpdated += UpdateSettings;
+        UpdateSettings("all");
+
         TimeManager.OnPlayingChanged += UpdatePlaying;
         TimeSyncHandler.OnTimeScaleChanged += UpdateTimeScale;
 

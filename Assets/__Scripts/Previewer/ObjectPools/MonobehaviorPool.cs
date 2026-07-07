@@ -6,6 +6,15 @@ public abstract class ObjectPool<T> : MonoBehaviour where T : MonoBehaviour
     public List<T> AvailableObjects = new List<T>();
     public List<T> ActiveObjects = new List<T>();
 
+    private readonly Queue<T> availableObjectQueue = new Queue<T>();
+    private readonly Dictionary<T, int> availableObjectCounts = new Dictionary<T, int>();
+    private readonly Dictionary<T, int> availableObjectIndices = new Dictionary<T, int>();
+    private readonly Dictionary<T, int> activeObjectCounts = new Dictionary<T, int>();
+    private readonly Dictionary<T, int> activeObjectIndices = new Dictionary<T, int>();
+
+    private int knownAvailableCount = -1;
+    private int knownActiveCount = -1;
+
     public int PoolSize { get; private set; }
 
     [SerializeField] T prefab;
@@ -22,6 +31,8 @@ public abstract class ObjectPool<T> : MonoBehaviour where T : MonoBehaviour
 
     private void AttemptMatchPoolSize()
     {
+        EnsureTrackingCurrent();
+
         int actualSize = AvailableObjects.Count + ActiveObjects.Count;
         int difference = actualSize - PoolSize;
         if(actualSize > PoolSize)
@@ -35,9 +46,9 @@ public abstract class ObjectPool<T> : MonoBehaviour where T : MonoBehaviour
                     //Enough objects have been deleted
                     break;
                 }
-                
-                Destroy(AvailableObjects[i].gameObject);
-                AvailableObjects.RemoveAt(i);
+
+                T deletedObject = RemoveAvailableObjectAt(i);
+                Destroy(deletedObject.gameObject);
                 deleted++;
             }
         }
@@ -47,7 +58,7 @@ public abstract class ObjectPool<T> : MonoBehaviour where T : MonoBehaviour
             for(int i = 0; i < Mathf.Abs(difference); i++)
             {
                 T newObject = CreateNewObject();
-                AvailableObjects.Add(newObject);
+                AddAvailableObject(newObject);
             }
         }
     }
@@ -65,16 +76,209 @@ public abstract class ObjectPool<T> : MonoBehaviour where T : MonoBehaviour
         return newItem;
     }
 
+    private void EnsureTrackingCurrent()
+    {
+        if(knownAvailableCount == AvailableObjects.Count && knownActiveCount == ActiveObjects.Count)
+        {
+            return;
+        }
+
+        RebuildTracking();
+    }
+
+
+    private void RebuildTracking()
+    {
+        availableObjectQueue.Clear();
+        availableObjectCounts.Clear();
+        availableObjectIndices.Clear();
+        activeObjectCounts.Clear();
+        activeObjectIndices.Clear();
+
+        for(int i = 0; i < AvailableObjects.Count; i++)
+        {
+            T availableObject = AvailableObjects[i];
+            AddTrackedObject(availableObjectCounts, availableObject);
+            availableObjectIndices[availableObject] = i;
+            availableObjectQueue.Enqueue(availableObject);
+        }
+
+        for(int i = 0; i < ActiveObjects.Count; i++)
+        {
+            T activeObject = ActiveObjects[i];
+            AddTrackedObject(activeObjectCounts, activeObject);
+            activeObjectIndices[activeObject] = i;
+        }
+
+        RememberListCounts();
+    }
+
+
+    private void RememberListCounts()
+    {
+        knownAvailableCount = AvailableObjects.Count;
+        knownActiveCount = ActiveObjects.Count;
+    }
+
+
+    private static void AddTrackedObject(Dictionary<T, int> objectCounts, T target)
+    {
+        int count;
+        objectCounts.TryGetValue(target, out count);
+        objectCounts[target] = count + 1;
+    }
+
+
+    private static int RemoveTrackedObject(Dictionary<T, int> objectCounts, T target)
+    {
+        int count = objectCounts[target] - 1;
+        if(count <= 0)
+        {
+            objectCounts.Remove(target);
+            return 0;
+        }
+
+        objectCounts[target] = count;
+        return count;
+    }
+
+
+    private void AddAvailableObject(T target)
+    {
+        availableObjectIndices[target] = AvailableObjects.Count;
+        AvailableObjects.Add(target);
+        availableObjectQueue.Enqueue(target);
+        AddTrackedObject(availableObjectCounts, target);
+        RememberListCounts();
+    }
+
+
+    private T TakeAvailableObject()
+    {
+        while(availableObjectQueue.Count > 0)
+        {
+            T target = availableObjectQueue.Dequeue();
+            if(availableObjectCounts.ContainsKey(target))
+            {
+                RemoveAvailableObject(target);
+                return target;
+            }
+        }
+
+        T fallbackObject = AvailableObjects[0];
+        RemoveAvailableObjectAt(0);
+        return fallbackObject;
+    }
+
+
+    private void RemoveAvailableObject(T target)
+    {
+        RemoveAvailableObjectAt(availableObjectIndices[target]);
+    }
+
+
+    private T RemoveAvailableObjectAt(int index)
+    {
+        T target = AvailableObjects[index];
+        int lastIndex = AvailableObjects.Count - 1;
+
+        if(index != lastIndex)
+        {
+            T lastObject = AvailableObjects[lastIndex];
+            AvailableObjects[index] = lastObject;
+            availableObjectIndices[lastObject] = index;
+        }
+
+        AvailableObjects.RemoveAt(lastIndex);
+
+        if(RemoveTrackedObject(availableObjectCounts, target) == 0)
+        {
+            availableObjectIndices.Remove(target);
+        }
+        else
+        {
+            availableObjectIndices[target] = FindAvailableObjectIndex(target);
+        }
+
+        RememberListCounts();
+        return target;
+    }
+
+
+    private int FindAvailableObjectIndex(T target)
+    {
+        for(int i = AvailableObjects.Count - 1; i >= 0; i--)
+        {
+            if(EqualityComparer<T>.Default.Equals(AvailableObjects[i], target))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+
+    private void AddActiveObject(T target)
+    {
+        activeObjectIndices[target] = ActiveObjects.Count;
+        ActiveObjects.Add(target);
+        AddTrackedObject(activeObjectCounts, target);
+        RememberListCounts();
+    }
+
+
+    private void RemoveActiveObject(T target)
+    {
+        int index = activeObjectIndices[target];
+        int lastIndex = ActiveObjects.Count - 1;
+
+        if(index != lastIndex)
+        {
+            T lastObject = ActiveObjects[lastIndex];
+            ActiveObjects[index] = lastObject;
+            activeObjectIndices[lastObject] = index;
+        }
+
+        ActiveObjects.RemoveAt(lastIndex);
+
+        if(RemoveTrackedObject(activeObjectCounts, target) == 0)
+        {
+            activeObjectIndices.Remove(target);
+        }
+        else
+        {
+            activeObjectIndices[target] = FindActiveObjectIndex(target);
+        }
+
+        RememberListCounts();
+    }
+
+
+    private int FindActiveObjectIndex(T target)
+    {
+        for(int i = ActiveObjects.Count - 1; i >= 0; i--)
+        {
+            if(EqualityComparer<T>.Default.Equals(ActiveObjects[i], target))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
 
     public T GetObject()
     {
+        EnsureTrackingCurrent();
+
         if(AvailableObjects.Count > 0)
         {
             //There is an object available in the pool. Activate it and return it.
-            T collectedObject = AvailableObjects[0];
+            T collectedObject = TakeAvailableObject();
 
-            AvailableObjects.RemoveAt(0);
-            ActiveObjects.Add(collectedObject);
+            AddActiveObject(collectedObject);
 
             return collectedObject;
         }
@@ -83,7 +287,7 @@ public abstract class ObjectPool<T> : MonoBehaviour where T : MonoBehaviour
         //This will indefinitely increase the size of the pool until it's cleared or otherwise modified
         T newObject = CreateNewObject();
 
-        ActiveObjects.Add(newObject);
+        AddActiveObject(newObject);
         PoolSize++;
 
         return newObject;
@@ -92,10 +296,12 @@ public abstract class ObjectPool<T> : MonoBehaviour where T : MonoBehaviour
 
     public void ReleaseObject(T target)
     {
-        if(!ActiveObjects.Contains(target))
+        EnsureTrackingCurrent();
+
+        if(!activeObjectCounts.ContainsKey(target))
         {
             //Oops haha how did that happen
-            if(!AvailableObjects.Contains(target))
+            if(!availableObjectCounts.ContainsKey(target))
             {
                 //Only want to destroy objects that don't exist anywhere
                 Destroy(target.gameObject);
@@ -111,8 +317,8 @@ public abstract class ObjectPool<T> : MonoBehaviour where T : MonoBehaviour
         target.gameObject.transform.SetParent(transform);
         target.gameObject.SetActive(false);
 
-        ActiveObjects.Remove(target);
-        AvailableObjects.Add(target);
+        RemoveActiveObject(target);
+        AddAvailableObject(target);
     }
 
 

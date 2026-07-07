@@ -4,6 +4,9 @@ using UnityEngine;
 
 public class LightHandler : MonoBehaviour
 {
+    private static readonly int laserColorID = Shader.PropertyToID("_LaserColor");
+    private static readonly int colorMultID = Shader.PropertyToID("_ColorMult");
+
     public Color CurrentColor = Color.blue;
     [NonSerialized] public bool Dirty = true;
 
@@ -25,12 +28,21 @@ public class LightHandler : MonoBehaviour
 
     private MaterialPropertyBlock laserProperties;
     private MaterialPropertyBlock glowProperties;
+    private Color lastLaserColor;
+    private Color lastGlowColor;
+    private bool propertiesDirty = true;
 
     private int lastCheckIndex = -1;
     private int nextCheckIndex = -1;
 
     private int lastEventIndex = -1;
     private int nextEventIndex = -1;
+
+
+    private static bool ColorValuesEqual(Color a, Color b)
+    {
+        return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+    }
 
 
     private void SetCurrentColor(Color newColor)
@@ -199,8 +211,17 @@ public class LightHandler : MonoBehaviour
 
     private void SetProperties(Color laserColor, Color glowColor)
     {
-        laserProperties.SetColor("_LaserColor", laserColor);
-        glowProperties.SetColor("_LaserColor", glowColor);
+        if(!propertiesDirty && ColorValuesEqual(lastLaserColor, laserColor) && ColorValuesEqual(lastGlowColor, glowColor))
+        {
+            return;
+        }
+
+        lastLaserColor = laserColor;
+        lastGlowColor = glowColor;
+        propertiesDirty = false;
+
+        laserProperties.SetColor(laserColorID, laserColor);
+        glowProperties.SetColor(laserColorID, glowColor);
 
         UpdateProperties();
     }
@@ -218,8 +239,8 @@ public class LightHandler : MonoBehaviour
         laserProperties = new MaterialPropertyBlock();
         glowProperties = new MaterialPropertyBlock();
 
-        laserProperties.SetFloat("_ColorMult", emissionMult);
-        glowProperties.SetFloat("_ColorMult", glowMult);
+        laserProperties.SetFloat(colorMultID, emissionMult);
+        glowProperties.SetFloat(colorMultID, glowMult);
     }
 
 

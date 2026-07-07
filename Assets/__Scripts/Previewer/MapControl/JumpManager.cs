@@ -13,8 +13,11 @@ public class JumpManager : MonoBehaviour
 
     public MapElementList<NjsEvent> NjsEvents = new MapElementList<NjsEvent>();
 
+    private static readonly MapElementList<NjsEvent>.CheckInRangeDelegate njsEventInRange = NjsEventInRange;
+
     private ObjectManager objectManager => ObjectManager.Instance;
-    private bool useVariableNJS => objectManager.forceGameAccuracy || SettingsManager.GetBool("variablenjs");
+    private bool variableNjs;
+    private bool useVariableNJS => objectManager.forceGameAccuracy || variableNjs;
 
 
     public bool CheckInSpawnRange(float time, float reactionTime, bool extendBehindCamera = false, bool includeMoveTime = true, float hitOffset = 0f)
@@ -192,7 +195,7 @@ public class JumpManager : MonoBehaviour
             return;
         }
 
-        int lastIndex = NjsEvents.GetLastIndex(TimeManager.CurrentTime, x => x.Beat <= beat);
+        int lastIndex = NjsEvents.GetLastIndex(TimeManager.CurrentTime, njsEventInRange);
 
         bool foundEvent = lastIndex >= 0;
         NjsEvent currentEvent = foundEvent ? NjsEvents[lastIndex] : null;
@@ -233,6 +236,20 @@ public class JumpManager : MonoBehaviour
     }
 
 
+    private static bool NjsEventInRange(NjsEvent njsEvent) => njsEvent.Beat <= TimeManager.CurrentBeat;
+
+
+    private void UpdateSettings(string setting)
+    {
+        if(!SettingsManager.Loaded || (setting != "all" && setting != "variablenjs"))
+        {
+            return;
+        }
+
+        variableNjs = SettingsManager.GetBool("variablenjs");
+    }
+
+
     public void UpdateDifficulty(Difficulty newDifficulty)
     {
         NjsEvents.Clear();
@@ -249,7 +266,17 @@ public class JumpManager : MonoBehaviour
 
     private void Start()
     {
+        SettingsManager.OnSettingsUpdated += UpdateSettings;
+        UpdateSettings("all");
+
         TimeManager.OnBeatChangedEarly += UpdateNjs;
+    }
+
+
+    private void OnDestroy()
+    {
+        SettingsManager.OnSettingsUpdated -= UpdateSettings;
+        TimeManager.OnBeatChangedEarly -= UpdateNjs;
     }
 }
 

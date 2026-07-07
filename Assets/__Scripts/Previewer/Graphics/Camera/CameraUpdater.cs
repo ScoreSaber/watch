@@ -42,10 +42,42 @@ public class CameraUpdater : MonoBehaviour
         "firstpersonreplay"
     };
 
+    private string[] firstPersonSettings = new string[]
+    {
+        "firstpersonreplay",
+        "fpcameraposition",
+        "forcefpcameraupright",
+        "fpcamerarotoffset",
+        "fpcameramovementsmoothing",
+        "fpcamerarotationsmoothing"
+    };
+
     private static bool firstPerson;
+    private bool firstPersonReplay;
+    private float fpCameraOffset;
+    private bool forceFpCameraUpright;
+    private int fpCameraRotOffset;
+    private float fpCameraMovementSmoothing;
+    private float fpCameraRotationSmoothing;
 
     private Vector3 fpCameraVelocity = Vector3.zero;
     private Quaternion fpCameraRotationDeriv = new Quaternion(0f, 0f, 0f, 0f);
+
+
+    private void UpdateFirstPersonSettings()
+    {
+        if(!SettingsManager.Loaded)
+        {
+            return;
+        }
+
+        firstPersonReplay = SettingsManager.GetBool("firstpersonreplay");
+        fpCameraOffset = Mathf.Clamp(SettingsManager.GetFloat("fpcameraposition"), 0f, 3f);
+        forceFpCameraUpright = SettingsManager.GetBool("forcefpcameraupright");
+        fpCameraRotOffset = Mathf.Clamp(SettingsManager.GetInt("fpcamerarotoffset"), -30, 30);
+        fpCameraMovementSmoothing = Mathf.Clamp01(SettingsManager.GetFloat("fpcameramovementsmoothing"));
+        fpCameraRotationSmoothing = Mathf.Clamp01(SettingsManager.GetFloat("fpcamerarotationsmoothing"));
+    }
 
 
     private void UpdateFov()
@@ -57,7 +89,7 @@ public class CameraUpdater : MonoBehaviour
         }
         else if(ReplayManager.IsReplayMode)
         {
-            fov = SettingsManager.GetBool("firstpersonreplay") ? SettingsManager.GetInt("fpcamerafov") : SettingsManager.GetInt("replaycamerafov");
+            fov = firstPersonReplay ? SettingsManager.GetInt("fpcamerafov") : SettingsManager.GetInt("replaycamerafov");
         }
         else fov = SettingsManager.GetInt("camerafov");
 
@@ -115,16 +147,14 @@ public class CameraUpdater : MonoBehaviour
         Vector3 headPosition = PlayerPositionManager.HeadPosition;
         Quaternion headRotation = PlayerPositionManager.HeadRotation;
 
-        float cameraOffset = Mathf.Clamp(SettingsManager.GetFloat("fpcameraposition"), 0f, 3f);
-        headPosition.z -= cameraOffset;
+        headPosition.z -= fpCameraOffset;
 
         Vector3 eulerAngles = headRotation.eulerAngles;
-        if(SettingsManager.GetBool("forcefpcameraupright"))
+        if(forceFpCameraUpright)
         {
             eulerAngles.x = 0f;
         }
-        int xRotOffset = Mathf.Clamp(SettingsManager.GetInt("fpcamerarotoffset"), -30, 30);
-        eulerAngles.x -= xRotOffset;
+        eulerAngles.x -= fpCameraRotOffset;
 
         headRotation = Quaternion.Euler(eulerAngles);
 
@@ -135,11 +165,8 @@ public class CameraUpdater : MonoBehaviour
             //Smooth out camera motions
             //This is a rare case where I actually don't want this to be deterministic
             //Cause then scrubbing would suck
-            float smoothAmount = Mathf.Clamp01(SettingsManager.GetFloat("fpcameramovementsmoothing"));
-            float rotSmoothAmount = Mathf.Clamp01(SettingsManager.GetFloat("fpcamerarotationsmoothing"));
-
-            cameraPosition = Vector3.SmoothDamp(cameraPosition, headPosition, ref fpCameraVelocity, smoothAmount);
-            cameraRotation = cameraRotation.SmoothDamp(headRotation, ref fpCameraRotationDeriv, rotSmoothAmount);
+            cameraPosition = Vector3.SmoothDamp(cameraPosition, headPosition, ref fpCameraVelocity, fpCameraMovementSmoothing);
+            cameraRotation = cameraRotation.SmoothDamp(headRotation, ref fpCameraRotationDeriv, fpCameraRotationSmoothing);
         }
         else
         {
@@ -173,6 +200,7 @@ public class CameraUpdater : MonoBehaviour
             SettingsManager.OnSettingsUpdated -= UpdateCameraSettings;
             SettingsManager.SetRule("firstpersonreplay", false);
             SettingsManager.OnSettingsUpdated += UpdateCameraSettings;
+            UpdateFirstPersonSettings();
         }
 
         UpdateFov();
@@ -182,10 +210,16 @@ public class CameraUpdater : MonoBehaviour
     public void UpdateCameraSettings(string setting)
     {
         bool allSettings = setting == "all";
+        bool firstPersonSetting = allSettings || firstPersonSettings.Contains(setting);
+
+        if(firstPersonSetting)
+        {
+            UpdateFirstPersonSettings();
+        }
 
         if(ReplayManager.IsReplayMode)
         {
-            if(SettingsManager.GetBool("firstpersonreplay"))
+            if(firstPersonReplay)
             {
                 if(allSettings || setting == "firstpersonreplay")
                 {
