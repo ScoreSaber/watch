@@ -190,6 +190,33 @@ public class MapLoader : MonoBehaviour
     }
 
 
+    private static void TryConvertScoreSaberLegacyReplay(LoadedMap mapData)
+    {
+        Replay replay = ReplayManager.CurrentReplay;
+        if(!ReplayManager.IsReplayMode || replay == null || !ScoreSaberLegacyConverter.NeedsConversion(replay))
+        {
+            return;
+        }
+
+        if(mapData?.Info == null || mapData.Difficulties == null || mapData.Difficulties.Count != 1)
+        {
+            return;
+        }
+
+        Difficulty difficulty = mapData.Difficulties[0];
+        if(difficulty?.beatmapDifficulty == null)
+        {
+            return;
+        }
+
+        ScoreSaberLegacyConverter.Convert(replay, difficulty.beatmapDifficulty, mapData.Info.audio.bpm);
+        if(replay.scoreSaberLegacyConverted)
+        {
+            ScoreManager.RebuildScoringEventsFromReplayNotes(replay);
+        }
+    }
+
+
     private async Task LoadMapZipAsync(string directory, CancellationToken token)
     {
         Loading = true;

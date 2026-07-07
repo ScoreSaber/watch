@@ -243,21 +243,17 @@ public class ScoreManager : MonoBehaviour
     public void UpdateObjects()
     {
         Replay replay = ReplayManager.CurrentReplay;
+        if(replay == null)
+        {
+            return;
+        }
+
         if(ScoreSaberLegacyConverter.NeedsConversion(replay))
         {
             ScoreSaberLegacyConverter.Convert(replay, BeatmapManager.CurrentDifficulty.beatmapDifficulty);
 
             // rebuild scoring events from the synthetic notes
-            ScoringEvents.Clear();
-            foreach(NoteEvent noteEvent in replay.notes)
-            {
-                ScoringEvent newEvent = new ScoringEvent(noteEvent);
-                if(ScoringEvents.Last != null && noteEvent.eventTime < ScoringEvents.Last.Time)
-                {
-                    ScoringEvents.InsertSorted(newEvent);
-                }
-                else ScoringEvents.Add(newEvent);
-            }
+            RebuildScoringEventsFromReplayNotes(replay);
 
             // retrigger ObjectManager to process notes with the new events
             ObjectManager.Instance.UpdateDifficulty(BeatmapManager.CurrentDifficulty);
@@ -266,6 +262,21 @@ public class ScoreManager : MonoBehaviour
 
         InitializeMapScore();
         UpdateBeat(TimeManager.CurrentBeat);
+    }
+
+
+    public static void RebuildScoringEventsFromReplayNotes(Replay replay)
+    {
+        ScoringEvents.Clear();
+        foreach(NoteEvent noteEvent in replay.notes)
+        {
+            ScoringEvent newEvent = new ScoringEvent(noteEvent);
+            if(ScoringEvents.Last != null && noteEvent.eventTime < ScoringEvents.Last.Time)
+            {
+                ScoringEvents.InsertSorted(newEvent);
+            }
+            else ScoringEvents.Add(newEvent);
+        }
     }
 
 
