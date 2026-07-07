@@ -106,6 +106,11 @@ public class ScoreSaberSource : ReplaySource
             return;
         }
 
+        if(!object.ReferenceEquals(ReplayManager.SourceInfo, source))
+        {
+            return;
+        }
+
         if(!string.IsNullOrEmpty(replay.info?.playerID))
         {
             source.PlayerID = replay.info.playerID;

@@ -84,12 +84,7 @@ public class MapLoader : MonoBehaviour
         }
 
         Debug.Log("Loading complete.");
-        LoadingMessage = "Done";
-
         LoadingMessage = "Initializing";
-        //Wait 2 frames to ensure the text updates
-        await Awaitable.NextFrameAsync();
-        await Awaitable.NextFrameAsync();
 
         TryLoadEnvironmentEarly(mapData);
         TryConvertScoreSaberLegacyReplay(mapData);
@@ -438,11 +433,18 @@ public class MapLoader : MonoBehaviour
 
         ReplayManager.SetReplay(replay);
 
-        Task sourceDataTask = LoadSourceDataAsync(sourceInfo, replay);
+        Task sourceDataTask = null;
+        Task StartSourceDataLoad()
+        {
+            sourceDataTask ??= LoadSourceDataAsync(sourceInfo, replay);
+            return sourceDataTask;
+        }
+
         if(mapTask != null)
         {
             if(await TryLoadPreparedMapAsync(mapTask, true, token))
             {
+                _ = StartSourceDataLoad();
                 return;
             }
 
@@ -480,14 +482,7 @@ public class MapLoader : MonoBehaviour
             if(!sourceInfo.HasFallbackMap)
             {
                 LoadingMessage = "Loading player profile";
-                try
-                {
-                    await sourceDataTask;
-                }
-                catch(Exception err)
-                {
-                    Debug.LogWarning($"Replay source data loading failed with error: {err.Message}, {err.StackTrace}");
-                }
+                await StartSourceDataLoad();
 
                 if(token.IsCancellationRequested)
                 {
@@ -513,19 +508,25 @@ public class MapLoader : MonoBehaviour
             else await LoadMapFromReplayAsync(replay, noProxy, token);
         }
         else await LoadMapFromReplayAsync(replay, noProxy, token);
+
+        _ = StartSourceDataLoad();
     }
 
 
-    private static Task LoadSourceDataAsync(ReplaySourceInfo sourceInfo, Replay replay)
+    private static async Task LoadSourceDataAsync(ReplaySourceInfo sourceInfo, Replay replay)
     {
         try
         {
-            return sourceInfo.LoadSourceData?.Invoke(replay) ?? Task.CompletedTask;
+            if(sourceInfo?.LoadSourceData == null)
+            {
+                return;
+            }
+
+            await sourceInfo.LoadSourceData(replay);
         }
         catch(Exception err)
         {
             Debug.LogWarning($"Replay source data loading failed with error: {err.Message}, {err.StackTrace}");
-            return Task.CompletedTask;
         }
     }
 
