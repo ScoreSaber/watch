@@ -121,9 +121,6 @@ public class SettingsManager : MonoBehaviour
             Debug.LogWarning($"Failed to load settings with error: {err.Message}, {err.StackTrace}");
             CurrentSettings = Settings.GetDefaultSettings();
 
-            //It *should* be impossible for this to happen on first startup, since the file wouldn't exist
-            //So the user will have already seen the static lights warning
-            SetRule("staticlightswarningacknowledged", true, false);
             SaveSettings();
         }
 
@@ -424,7 +421,7 @@ public class SettingsManager : MonoBehaviour
 
     public static void SetDefaults()
     {
-        bool staticLightsWarningAcknowledged = GetBool("staticlightswarningacknowledged");
+        bool staticLightsHintDismissed = GetBool("staticlightshintdismissed");
         bool replayMode = GetBool("replaymode");
 
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -439,7 +436,7 @@ public class SettingsManager : MonoBehaviour
         Overrides = null;
         
         //Some settings should still persist or else they'll be annoying
-        SetRule("staticlightswarningacknowledged", staticLightsWarningAcknowledged, false);
+        SetRule("staticlightshintdismissed", staticLightsHintDismissed, false);
         SetRule("replaymode", replayMode, false);
 
         OnSettingsReset?.Invoke();

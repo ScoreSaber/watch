@@ -8,7 +8,7 @@ public class DialogueHandler : MonoBehaviour
 
     public static List<DialogueBox> OpenBoxes = new List<DialogueBox>();
     public static bool LogActive => Instance.logCanvas.activeInHierarchy;
-    public static bool DialogueActive => OpenBoxes.Count > 0 || Instance.infoPanel.activeInHierarchy || Instance.staticLightsWarningPanel.activeInHierarchy || Instance.customHsvPanel.activeInHierarchy || Instance.overrideExportPanel.activeInHierarchy || LogActive;
+    public static bool DialogueActive => OpenBoxes.Count > 0 || Instance.infoPanel.activeInHierarchy || Instance.customHsvPanel.activeInHierarchy || Instance.overrideExportPanel.activeInHierarchy || LogActive;
     public static bool PopupActive => DialogueActive || Instance.sharePanel.activeInHierarchy || Instance.jumpSettingsPanel.activeInHierarchy || Instance.statsPanel.activeInHierarchy;
 
     [SerializeField] private GameObject dialogueBoxPrefab;
@@ -19,7 +19,6 @@ public class DialogueHandler : MonoBehaviour
     public GameObject sharePanel;
     public GameObject jumpSettingsPanel;
     public GameObject statsPanel;
-    public GameObject staticLightsWarningPanel;
     public GameObject customHsvPanel;
     public GameObject overrideExportPanel;
 
@@ -68,12 +67,6 @@ public class DialogueHandler : MonoBehaviour
 
     private void DialogueKeybinds()
     {
-        if(staticLightsWarningPanel.activeInHierarchy)
-        {
-            //Don't use keybinds to exit the warning panel (it's important)
-            return;
-        }
-
         bool cancel = Input.GetButtonDown("Cancel");
         bool submit = Input.GetButtonDown("Submit");
         if(!cancel && !submit)

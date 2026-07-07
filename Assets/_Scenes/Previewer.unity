@@ -9738,7 +9738,7 @@ MonoBehaviour:
       enabled: 0
       value: 0
   - Name: staticlights
-    Value: 0
+    Value: 1
     ValueWebGL:
       enabled: 0
       value: 0
@@ -9897,7 +9897,7 @@ MonoBehaviour:
     ValueWebGL:
       enabled: 0
       value: 0
-  - Name: staticlightswarningacknowledged
+  - Name: staticlightshintdismissed
     Value: 0
     ValueWebGL:
       enabled: 0
@@ -20521,7 +20521,6 @@ MonoBehaviour:
   sharePanel: {fileID: 746789545}
   jumpSettingsPanel: {fileID: 868110370}
   statsPanel: {fileID: 746234558}
-  staticLightsWarningPanel: {fileID: 1115791867}
   customHsvPanel: {fileID: 636204015}
   overrideExportPanel: {fileID: 192274113}
 --- !u!1 &630626889 stripped
@@ -51333,7 +51332,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1578724047
 RectTransform:
   m_ObjectHideFlags: 0
@@ -69495,6 +69494,7 @@ RectTransform:
   - {fileID: 965091957}
   - {fileID: 511568473}
   - {fileID: 631200998}
+  - {fileID: 2147000001}
   m_Father: {fileID: 1851035721}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -69594,6 +69594,52 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   preferredPadding: 200
   minWidth: 500
+--- !u!1001 &2147000000
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 2129811437}
+    m_Modifications:
+    - target: {fileID: 7200000000000000001, guid: 6921a00f6fe24ed3a3878c9cc17ead49, type: 3}
+      propertyPath: m_RootOrder
+      value: 7
+      objectReference: {fileID: 0}
+    - target: {fileID: 7200000000000000001, guid: 6921a00f6fe24ed3a3878c9cc17ead49, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: -369
+      objectReference: {fileID: 0}
+    - target: {fileID: 7200000000000000001, guid: 6921a00f6fe24ed3a3878c9cc17ead49, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 32
+      objectReference: {fileID: 0}
+    - target: {fileID: 7200000000000000601, guid: 6921a00f6fe24ed3a3878c9cc17ead49, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 6
+      objectReference: {fileID: 0}
+    - target: {fileID: 7200000000000000601, guid: 6921a00f6fe24ed3a3878c9cc17ead49, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 7200000000000000501, guid: 6921a00f6fe24ed3a3878c9cc17ead49, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 144
+      objectReference: {fileID: 0}
+    - target: {fileID: 7200000000000000501, guid: 6921a00f6fe24ed3a3878c9cc17ead49, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 6921a00f6fe24ed3a3878c9cc17ead49, type: 3}
+--- !u!224 &2147000001 stripped
+RectTransform:
+  m_CorrespondingSourceObject: {fileID: 7200000000000000001, guid: 6921a00f6fe24ed3a3878c9cc17ead49, type: 3}
+  m_PrefabInstance: {fileID: 2147000000}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &2136268612
 PrefabInstance:
   m_ObjectHideFlags: 0
