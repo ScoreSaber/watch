@@ -64,7 +64,10 @@ public static class PlayerBuilder
         }
 
         PlayerSettings.SetIl2CppCodeGeneration(named, Il2CppCodeGeneration.OptimizeSize);
-        PlayerSettings.SetManagedStrippingLevel(named, dev ? ManagedStrippingLevel.Minimal : ManagedStrippingLevel.Low);
+        ManagedStrippingLevel strippingLevel = dev
+            ? ManagedStrippingLevel.Minimal
+            : target == BuildTarget.WebGL ? ManagedStrippingLevel.High : ManagedStrippingLevel.Low;
+        PlayerSettings.SetManagedStrippingLevel(named, strippingLevel);
 
         EditorBuildSettingsScene[] built = EditorBuildSettings.scenes;
         string[] scenes = new string[built.Length];
