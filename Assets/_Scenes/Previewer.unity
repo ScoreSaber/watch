@@ -47751,7 +47751,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: ArcViewer 0.7.7+ss.5
+  m_text: ArcViewer 0.7.8b+ss.9
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 78be5821565fc5848a05da897476c0d3, type: 2}
   m_sharedMaterial: {fileID: -8419783504037868241, guid: 78be5821565fc5848a05da897476c0d3, type: 2}
@@ -47844,7 +47844,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   prefixText: 'ArcViewer '
-  suffixText: +ss.5
+  suffixText: b+ss.9
 --- !u!114 &1491974456
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -48888,7 +48888,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: ArcViewer 0.7.7+ss.5
+  m_text: ArcViewer 0.7.8b+ss.9
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 78be5821565fc5848a05da897476c0d3, type: 2}
   m_sharedMaterial: {fileID: -8419783504037868241, guid: 78be5821565fc5848a05da897476c0d3, type: 2}
@@ -48981,7 +48981,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   prefixText: 'ArcViewer '
-  suffixText: +ss.5
+  suffixText: b+ss.9
 --- !u!1001 &1509348771
 PrefabInstance:
   m_ObjectHideFlags: 0
