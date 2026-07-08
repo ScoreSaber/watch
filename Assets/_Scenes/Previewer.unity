@@ -9687,7 +9687,7 @@ MonoBehaviour:
       enabled: 0
       value: 0
   - Name: useuicolor
-    Value: 1
+    Value: 0
     ValueWebGL:
       enabled: 0
       value: 0
@@ -10185,7 +10185,7 @@ MonoBehaviour:
       value: 0
   defaultColors:
   - Name: uicolor
-    Value: {r: 0.67058825, g: 0.5803922, b: 0.043137256, a: 1}
+    Value: {r: 0.07058824, g: 0.40784314, b: 0.6313726, a: 1}
     ValueWebGL:
       enabled: 0
       value: {r: 0, g: 0, b: 0, a: 0}

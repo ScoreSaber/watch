@@ -48,8 +48,8 @@ public class SettingsManager : MonoBehaviour
     private static float dirtyTime = 0f;
 #endif
 
-    private static readonly Color OldUIColor = new Color(0.07058824f, 0.40784314f, 0.6313726f);
-    private static readonly Color NewUIColor = new Color(0.67058825f, 0.5803922f, 0.04313726f);
+    private static readonly Color PreviousUIColor = new Color(0.07058824f, 0.40784314f, 0.6313726f);
+    private static readonly Color PoisonedUIColor = new Color(0.67058825f, 0.5803922f, 0.04313726f);
     private const int MobileDefaultFrameCap = 75;
     private const int CompactViewportWidth = 700;
     private const int CompactScreenWidth = 1100;
@@ -482,8 +482,7 @@ public class SettingsManager : MonoBehaviour
 
         changed |= MigrateBoolDefault("firstpersonreplay", false, true);
         changed |= MigrateFirstPersonCameraDefaults();
-        changed |= MigrateBoolDefault("useuicolor", false, true);
-        changed |= MigrateColorDefault("uicolor", OldUIColor, NewUIColor);
+        changed |= RestorePoisonedUIColorDefault();
         changed |= MigrateBoolDefault("showheadset", false, true);
         changed |= MigrateBoolDefault("forcefpcameraupright", false, true);
 
@@ -550,6 +549,33 @@ public class SettingsManager : MonoBehaviour
         SetMigratedFloat("fpcameramovementsmoothing", 0f);
         SetMigratedFloat("fpcamerarotationsmoothing", 0.3f);
         SetMigratedInt("fpcamerarotoffset", -15);
+        return true;
+    }
+
+
+    private static bool RestorePoisonedUIColorDefault()
+    {
+        bool hasStoredPoisonedUIColor =
+            HasStoredBool("useuicolor") &&
+            HasStoredFloat("uicolor.r") &&
+            HasStoredFloat("uicolor.g") &&
+            HasStoredFloat("uicolor.b");
+
+        bool usesPoisonedUIColor =
+            BoolUsesOldDefault("useuicolor", true) &&
+            FloatUsesOldDefault("uicolor.r", PoisonedUIColor.r) &&
+            FloatUsesOldDefault("uicolor.g", PoisonedUIColor.g) &&
+            FloatUsesOldDefault("uicolor.b", PoisonedUIColor.b);
+
+        if(!hasStoredPoisonedUIColor || !usesPoisonedUIColor)
+        {
+            return false;
+        }
+
+        SetMigratedBool("useuicolor", false);
+        SetMigratedFloat("uicolor.r", PreviousUIColor.r);
+        SetMigratedFloat("uicolor.g", PreviousUIColor.g);
+        SetMigratedFloat("uicolor.b", PreviousUIColor.b);
         return true;
     }
 
