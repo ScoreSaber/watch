@@ -9,6 +9,9 @@ public class GraphicSettingsUpdater : MonoBehaviour
     public const string MatchRefreshSetting = "vsync";
     public const string FpsLimitSetting = "framecap";
 
+    private const int IdleFrameRate = 30;
+    private const float IdleFrameRateDelay = 1.5f;
+
     [SerializeField] private Volume bloomVolume;
     [SerializeField] private UniversalRenderPipelineAsset urpAsset;
     [SerializeField] private RenderTexture orthoCameraTexture;
@@ -19,6 +22,9 @@ public class GraphicSettingsUpdater : MonoBehaviour
 
     private Bloom bloom;
     private Coroutine targetFrameRateRefreshCoroutine;
+    private Vector3 lastInputMousePosition;
+    private float activeFrameRateUntil;
+    private bool usingIdleFrameRate;
 
 
     private void SetOrthoCameraMSAA(int msaa)
@@ -123,17 +129,82 @@ public class GraphicSettingsUpdater : MonoBehaviour
     }
 
 
+    private int GetIdleFrameRate(int configuredFrameRate)
+    {
+        return Mathf.Clamp(IdleFrameRate, 1, configuredFrameRate);
+    }
+
+
+    private bool ShouldUseIdleFrameRate(bool capFps)
+    {
+        return capFps
+            && Time.unscaledTime >= activeFrameRateUntil
+            && !TimeManager.Playing
+            && !TimeManager.Scrubbing
+            && !ReplayManager.CurrentLiveViewingState.Active
+            && !ReplayManager.IsLiveReplay
+            && !MapLoader.Loading
+            && !HotReloader.Loading
+            && !EnvironmentManager.Loading;
+    }
+
+
+    private bool HasUserInput()
+    {
+        Vector3 mousePosition = Input.mousePosition;
+        bool mouseMoved = mousePosition != lastInputMousePosition;
+        lastInputMousePosition = mousePosition;
+
+        return mouseMoved
+            || Input.anyKey
+            || Input.mouseScrollDelta.sqrMagnitude > 0f
+            || Input.touchCount > 0;
+    }
+
+
+    private void KeepActiveFrameRate()
+    {
+        activeFrameRateUntil = Time.unscaledTime + IdleFrameRateDelay;
+    }
+
+
+    private void UpdateAdaptiveFrameRate()
+    {
+        if(!SettingsManager.Loaded)
+        {
+            return;
+        }
+
+        if(HasUserInput() || TimeManager.Playing || TimeManager.Scrubbing)
+        {
+            KeepActiveFrameRate();
+        }
+
+        bool shouldUseIdleFrameRate = ShouldUseIdleFrameRate(SettingsManager.GetBool(CapFpsSetting, false));
+        if(shouldUseIdleFrameRate != usingIdleFrameRate)
+        {
+            ApplyFrameLimiter(false);
+        }
+    }
+
+
     private void ApplyFrameLimiter(bool forceTargetFrameRateRefresh)
     {
         bool capFps = SettingsManager.GetBool(CapFpsSetting, false);
         bool matchRefresh = SettingsManager.GetBool(MatchRefreshSetting, false);
         int frameRate = GetConfiguredFrameRate();
+        usingIdleFrameRate = ShouldUseIdleFrameRate(capFps);
 
         if(!capFps)
         {
             CancelTargetFrameRateRefresh();
             QualitySettings.vSyncCount = 0;
             Application.targetFrameRate = -1;
+        }
+        else if(usingIdleFrameRate)
+        {
+            QualitySettings.vSyncCount = 0;
+            ApplyTargetFrameRate(GetIdleFrameRate(frameRate), forceTargetFrameRateRefresh);
         }
         else if(matchRefresh)
         {
@@ -155,6 +226,7 @@ public class GraphicSettingsUpdater : MonoBehaviour
 
         if(allSettings || setting == CapFpsSetting || setting == MatchRefreshSetting || setting == FpsLimitSetting)
         {
+            KeepActiveFrameRate();
             ApplyFrameLimiter(allSettings || setting == CapFpsSetting || setting == MatchRefreshSetting);
         }
 
@@ -208,8 +280,38 @@ public class GraphicSettingsUpdater : MonoBehaviour
     }
 
 
+    private void UpdatePlaying(bool playing)
+    {
+        if(!playing || !SettingsManager.Loaded)
+        {
+            return;
+        }
+
+        KeepActiveFrameRate();
+        ApplyFrameLimiter(false);
+    }
+
+
+    private void UpdateLiveViewingState(LiveViewingState state)
+    {
+        if(!SettingsManager.Loaded)
+        {
+            return;
+        }
+
+        if(state != null && state.Active)
+        {
+            KeepActiveFrameRate();
+        }
+        ApplyFrameLimiter(false);
+    }
+
+
     private void Start()
     {
+        lastInputMousePosition = Input.mousePosition;
+        KeepActiveFrameRate();
+
         bool foundBloom = bloomVolume.profile.TryGet<Bloom>(out bloom);
         if(foundBloom)
         {
@@ -221,6 +323,8 @@ public class GraphicSettingsUpdater : MonoBehaviour
         }
 
         SettingsManager.OnSettingsUpdated += UpdateGraphicsSettings;
+        TimeManager.OnPlayingChanged += UpdatePlaying;
+        ReplayManager.OnLiveViewingStateUpdated += UpdateLiveViewingState;
         if(SettingsManager.Loaded)
         {
             UpdateGraphicsSettings("all");
@@ -228,8 +332,16 @@ public class GraphicSettingsUpdater : MonoBehaviour
     }
 
 
+    private void Update()
+    {
+        UpdateAdaptiveFrameRate();
+    }
+
+
     private void OnDestroy()
     {
         SettingsManager.OnSettingsUpdated -= UpdateGraphicsSettings;
+        TimeManager.OnPlayingChanged -= UpdatePlaying;
+        ReplayManager.OnLiveViewingStateUpdated -= UpdateLiveViewingState;
     }
 }
