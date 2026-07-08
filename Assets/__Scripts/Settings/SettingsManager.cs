@@ -54,6 +54,17 @@ public class SettingsManager : MonoBehaviour
     private const int CompactViewportWidth = 700;
     private const int CompactScreenWidth = 1100;
 #if UNITY_WEBGL && !UNITY_EDITOR
+    private const string WebAudioVolumeScaleMigrationSetting = "webaudiovolumescale";
+    private const int WebAudioVolumeScaleMigrationVersion = 1;
+    private static readonly string[] WebAudioVolumeSettings = new string[]
+    {
+        "musicvolume",
+        "hitsoundvolume",
+        "chainvolume"
+    };
+#endif
+
+#if UNITY_WEBGL && !UNITY_EDITOR
     [System.Runtime.InteropServices.DllImport("__Internal")]
     private static extern int GetArcViewerViewportWidth();
 
@@ -444,6 +455,7 @@ public class SettingsManager : MonoBehaviour
 
 #if UNITY_WEBGL && !UNITY_EDITOR
         PlayerPrefs.DeleteAll();
+        PlayerPrefs.SetInt(WebAudioVolumeScaleMigrationSetting, WebAudioVolumeScaleMigrationVersion);
         CurrentSettings = new Settings();
 #else
         CurrentSettings = Settings.GetDefaultSettings();
@@ -476,6 +488,8 @@ public class SettingsManager : MonoBehaviour
         changed |= MigrateBoolDefault("forcefpcameraupright", false, true);
 
 #if UNITY_WEBGL && !UNITY_EDITOR
+        changed |= MigrateWebAudioVolumeScale();
+
         if(changed)
         {
             PlayerPrefs.Save();
@@ -484,6 +498,30 @@ public class SettingsManager : MonoBehaviour
 
         return changed;
     }
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+    private static bool MigrateWebAudioVolumeScale()
+    {
+        if(PlayerPrefs.GetInt(WebAudioVolumeScaleMigrationSetting, 0) >= WebAudioVolumeScaleMigrationVersion)
+        {
+            return false;
+        }
+
+        foreach(string setting in WebAudioVolumeSettings)
+        {
+            if(!PlayerPrefs.HasKey(setting))
+            {
+                continue;
+            }
+
+            float oldGain = Mathf.Clamp01(PlayerPrefs.GetFloat(setting));
+            SetMigratedFloat(setting, Mathf.Sqrt(oldGain));
+        }
+
+        PlayerPrefs.SetInt(WebAudioVolumeScaleMigrationSetting, WebAudioVolumeScaleMigrationVersion);
+        return true;
+    }
+#endif
 
 
     private static bool MigrateFirstPersonCameraDefaults()
