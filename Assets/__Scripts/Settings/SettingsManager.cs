@@ -48,6 +48,9 @@ public class SettingsManager : MonoBehaviour
     private static float dirtyTime = 0f;
 #endif
 
+    private static readonly Color OldUIColor = new Color(0.07058824f, 0.40784314f, 0.6313726f);
+    private static readonly Color NewUIColor = new Color(0.67058825f, 0.5803922f, 0.04313726f);
+
     [SerializeField] private List<SerializedOption<bool>> defaultBools;
     [SerializeField] private List<SerializedOption<int>> defaultInts;
     [SerializeField] private List<SerializedOption<float>> defaultFloats;
@@ -122,6 +125,11 @@ public class SettingsManager : MonoBehaviour
             CurrentSettings = Settings.GetDefaultSettings();
 
             SaveSettings();
+        }
+
+        if(ApplyDefaultMigrations())
+        {
+            SetDirty();
         }
 
         OnSettingsUpdated?.Invoke("all");
@@ -446,6 +454,181 @@ public class SettingsManager : MonoBehaviour
     }
 
 
+    private static bool ApplyDefaultMigrations()
+    {
+        bool changed = false;
+
+        changed |= MigrateBoolDefault("firstpersonreplay", false, true);
+        changed |= MigrateFirstPersonCameraDefaults();
+        changed |= MigrateBoolDefault("useuicolor", false, true);
+        changed |= MigrateColorDefault("uicolor", OldUIColor, NewUIColor);
+        changed |= MigrateBoolDefault("showheadset", false, true);
+        changed |= MigrateBoolDefault("forcefpcameraupright", false, true);
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+        if(changed)
+        {
+            PlayerPrefs.Save();
+        }
+#endif
+
+        return changed;
+    }
+
+
+    private static bool MigrateFirstPersonCameraDefaults()
+    {
+        bool hasStoredCameraSettings =
+            HasStoredInt("fpcamerafov") ||
+            HasStoredFloat("fpcameraposition") ||
+            HasStoredFloat("fpcameramovementsmoothing") ||
+            HasStoredFloat("fpcamerarotationsmoothing") ||
+            HasStoredInt("fpcamerarotoffset");
+
+        bool usesOldCameraSettings =
+            IntUsesOldDefault("fpcamerafov", 75) &&
+            FloatUsesOldDefault("fpcameraposition", 1f) &&
+            FloatUsesOldDefault("fpcameramovementsmoothing", 0f) &&
+            FloatUsesOldDefault("fpcamerarotationsmoothing", 0.3f) &&
+            IntUsesOldDefault("fpcamerarotoffset", 0);
+
+        if(!hasStoredCameraSettings || !usesOldCameraSettings)
+        {
+            return false;
+        }
+
+        SetMigratedInt("fpcamerafov", 70);
+        SetMigratedFloat("fpcameraposition", 0.7f);
+        SetMigratedFloat("fpcameramovementsmoothing", 0f);
+        SetMigratedFloat("fpcamerarotationsmoothing", 0.3f);
+        SetMigratedInt("fpcamerarotoffset", -15);
+        return true;
+    }
+
+
+    private static bool MigrateBoolDefault(string name, bool oldValue, bool newValue)
+    {
+        if(!HasStoredBool(name) || !BoolUsesOldDefault(name, oldValue))
+        {
+            return false;
+        }
+
+        SetMigratedBool(name, newValue);
+        return true;
+    }
+
+
+    private static bool MigrateColorDefault(string name, Color oldValue, Color newValue)
+    {
+        string red = name + ".r";
+        string green = name + ".g";
+        string blue = name + ".b";
+
+        bool hasStoredColor = HasStoredFloat(red) || HasStoredFloat(green) || HasStoredFloat(blue);
+        bool usesOldColor =
+            FloatUsesOldDefault(red, oldValue.r) &&
+            FloatUsesOldDefault(green, oldValue.g) &&
+            FloatUsesOldDefault(blue, oldValue.b);
+
+        if(!hasStoredColor || !usesOldColor)
+        {
+            return false;
+        }
+
+        SetMigratedFloat(red, newValue.r);
+        SetMigratedFloat(green, newValue.g);
+        SetMigratedFloat(blue, newValue.b);
+        return true;
+    }
+
+
+    private static bool HasStoredBool(string name)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return PlayerPrefs.HasKey(name);
+#else
+        return CurrentSettings.Bools.ContainsKey(name);
+#endif
+    }
+
+
+    private static bool HasStoredInt(string name)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return PlayerPrefs.HasKey(name);
+#else
+        return CurrentSettings.Ints.ContainsKey(name);
+#endif
+    }
+
+
+    private static bool HasStoredFloat(string name)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return PlayerPrefs.HasKey(name);
+#else
+        return CurrentSettings.Floats.ContainsKey(name);
+#endif
+    }
+
+
+    private static bool BoolUsesOldDefault(string name, bool oldValue)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return !PlayerPrefs.HasKey(name) || (PlayerPrefs.GetInt(name) > 0) == oldValue;
+#else
+        return !CurrentSettings.Bools.TryGetValue(name, out bool value) || value == oldValue;
+#endif
+    }
+
+
+    private static bool IntUsesOldDefault(string name, int oldValue)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return !PlayerPrefs.HasKey(name) || PlayerPrefs.GetInt(name) == oldValue;
+#else
+        return !CurrentSettings.Ints.TryGetValue(name, out int value) || value == oldValue;
+#endif
+    }
+
+
+    private static bool FloatUsesOldDefault(string name, float oldValue)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return !PlayerPrefs.HasKey(name) || Mathf.Approximately(PlayerPrefs.GetFloat(name), oldValue);
+#else
+        return !CurrentSettings.Floats.TryGetValue(name, out float value) || Mathf.Approximately(value, oldValue);
+#endif
+    }
+
+
+    private static void SetMigratedBool(string name, bool value)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        PlayerPrefs.SetInt(name, value ? 1 : 0);
+#endif
+        CurrentSettings.Bools[name] = value;
+    }
+
+
+    private static void SetMigratedInt(string name, int value)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        PlayerPrefs.SetInt(name, value);
+#endif
+        CurrentSettings.Ints[name] = value;
+    }
+
+
+    private static void SetMigratedFloat(string name, float value)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        PlayerPrefs.SetFloat(name, value);
+#endif
+        CurrentSettings.Floats[name] = value;
+    }
+
+
     private void UpdateUIState(UIState newState)
     {
         if(UseOverrides && newState == UIState.MapSelection)
@@ -473,6 +656,7 @@ public class SettingsManager : MonoBehaviour
         LoadSettings();
 #else
         CurrentSettings = new Settings();
+        ApplyDefaultMigrations();
         OnSettingsUpdated?.Invoke("all");
 #endif
     }

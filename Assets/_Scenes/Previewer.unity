@@ -9683,7 +9683,7 @@ MonoBehaviour:
       enabled: 0
       value: 0
   - Name: useuicolor
-    Value: 0
+    Value: 1
     ValueWebGL:
       enabled: 0
       value: 0
@@ -9788,12 +9788,12 @@ MonoBehaviour:
       enabled: 0
       value: 0
   - Name: firstpersonreplay
-    Value: 0
+    Value: 1
     ValueWebGL:
       enabled: 0
       value: 0
   - Name: forcefpcameraupright
-    Value: 0
+    Value: 1
     ValueWebGL:
       enabled: 0
       value: 0
@@ -9813,7 +9813,7 @@ MonoBehaviour:
       enabled: 0
       value: 0
   - Name: showheadset
-    Value: 0
+    Value: 1
     ValueWebGL:
       enabled: 0
       value: 0
@@ -9949,12 +9949,12 @@ MonoBehaviour:
       enabled: 0
       value: 0
   - Name: fpcamerafov
-    Value: 75
+    Value: 70
     ValueWebGL:
       enabled: 0
       value: 0
   - Name: fpcamerarotoffset
-    Value: 0
+    Value: -15
     ValueWebGL:
       enabled: 0
       value: 0
@@ -10125,7 +10125,7 @@ MonoBehaviour:
       enabled: 0
       value: 0
   - Name: fpcameraposition
-    Value: 1
+    Value: 0.7
     ValueWebGL:
       enabled: 0
       value: 0
@@ -10176,7 +10176,7 @@ MonoBehaviour:
       value: 0
   defaultColors:
   - Name: uicolor
-    Value: {r: 0.07058824, g: 0.40784314, b: 0.6313726, a: 1}
+    Value: {r: 0.67058825, g: 0.5803922, b: 0.043137256, a: 1}
     ValueWebGL:
       enabled: 0
       value: {r: 0, g: 0, b: 0, a: 0}
