@@ -50,6 +50,16 @@ public class SettingsManager : MonoBehaviour
 
     private static readonly Color OldUIColor = new Color(0.07058824f, 0.40784314f, 0.6313726f);
     private static readonly Color NewUIColor = new Color(0.67058825f, 0.5803922f, 0.04313726f);
+    private const int MobileDefaultFrameCap = 60;
+    private const int CompactViewportWidth = 700;
+    private const int CompactScreenWidth = 1100;
+#if UNITY_WEBGL && !UNITY_EDITOR
+    [System.Runtime.InteropServices.DllImport("__Internal")]
+    private static extern int GetArcViewerViewportWidth();
+
+    [System.Runtime.InteropServices.DllImport("__Internal")]
+    private static extern int GetArcViewerViewportHeight();
+#endif
 
     [SerializeField] private List<SerializedOption<bool>> defaultBools;
     [SerializeField] private List<SerializedOption<int>> defaultInts;
@@ -640,6 +650,43 @@ public class SettingsManager : MonoBehaviour
     }
 
 
+    private static void ApplyRuntimeDefaults()
+    {
+        bool mobileViewport = IsMobileViewport();
+
+        Settings.DefaultSettings.Bools[GraphicSettingsUpdater.CapFpsSetting] = true;
+        Settings.DefaultSettings.Bools[GraphicSettingsUpdater.MatchRefreshSetting] = !mobileViewport;
+        Settings.DefaultSettings.Ints[GraphicSettingsUpdater.FpsLimitSetting] =
+            mobileViewport ? MobileDefaultFrameCap : GetDisplayRefreshRate();
+    }
+
+
+    private static bool IsMobileViewport()
+    {
+        if(Application.isMobilePlatform)
+        {
+            return true;
+        }
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+        int viewportWidth = Mathf.Max(1, GetArcViewerViewportWidth());
+        int viewportHeight = Mathf.Max(1, GetArcViewerViewportHeight());
+        return viewportHeight > viewportWidth * 1.15f
+            || viewportWidth <= CompactViewportWidth
+            || (Screen.height > Screen.width * 1.15f && Screen.width <= CompactScreenWidth);
+#else
+        return false;
+#endif
+    }
+
+
+    private static int GetDisplayRefreshRate()
+    {
+        int refreshRate = Mathf.RoundToInt((float)Screen.currentResolution.refreshRateRatio.value);
+        return refreshRate > 0 ? Mathf.Clamp(refreshRate, 1, 999) : MobileDefaultFrameCap;
+    }
+
+
     private void Awake()
     {
         UIStateManager.OnUIStateChanged += UpdateUIState;
@@ -649,6 +696,7 @@ public class SettingsManager : MonoBehaviour
         Settings.DefaultSettings.Ints = Settings.SerializedOptionsToDictionary<int>(defaultInts);
         Settings.DefaultSettings.Floats = Settings.SerializedOptionsToDictionary<float>(defaultFloats);
         Settings.DefaultSettings.AddColorRules(defaultColors);
+        ApplyRuntimeDefaults();
 
 #if !UNITY_WEBGL || UNITY_EDITOR
         //Load settings from json if not running in WebGL

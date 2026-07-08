@@ -1,9 +1,14 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
 public class GraphicSettingsUpdater : MonoBehaviour
 {
+    public const string CapFpsSetting = "capfps";
+    public const string MatchRefreshSetting = "vsync";
+    public const string FpsLimitSetting = "framecap";
+
     [SerializeField] private Volume bloomVolume;
     [SerializeField] private UniversalRenderPipelineAsset urpAsset;
     [SerializeField] private RenderTexture orthoCameraTexture;
@@ -13,6 +18,7 @@ public class GraphicSettingsUpdater : MonoBehaviour
     [SerializeField] private float defaultBloomStrength;
 
     private Bloom bloom;
+    private Coroutine targetFrameRateRefreshCoroutine;
 
 
     private void SetOrthoCameraMSAA(int msaa)
@@ -70,27 +76,86 @@ public class GraphicSettingsUpdater : MonoBehaviour
     }
 
 
+    private int GetRefreshFrameRate(int frameRate)
+    {
+        return frameRate == 999 ? 998 : frameRate + 1;
+    }
+
+
+    private IEnumerator RefreshTargetFrameRateNextFrame(int frameRate)
+    {
+        yield return null;
+        Application.targetFrameRate = frameRate;
+        targetFrameRateRefreshCoroutine = null;
+    }
+
+
+    private void CancelTargetFrameRateRefresh()
+    {
+        if(targetFrameRateRefreshCoroutine == null)
+        {
+            return;
+        }
+
+        StopCoroutine(targetFrameRateRefreshCoroutine);
+        targetFrameRateRefreshCoroutine = null;
+    }
+
+
+    private void ApplyTargetFrameRate(int frameRate, bool forceRefresh)
+    {
+        CancelTargetFrameRateRefresh();
+
+        if(forceRefresh && isActiveAndEnabled)
+        {
+            Application.targetFrameRate = GetRefreshFrameRate(frameRate);
+            targetFrameRateRefreshCoroutine = StartCoroutine(RefreshTargetFrameRateNextFrame(frameRate));
+            return;
+        }
+
+        Application.targetFrameRate = frameRate;
+    }
+
+
+    private int GetConfiguredFrameRate()
+    {
+        return Mathf.Clamp(SettingsManager.GetInt(FpsLimitSetting, false), 1, 999);
+    }
+
+
+    private void ApplyFrameLimiter(bool forceTargetFrameRateRefresh)
+    {
+        bool capFps = SettingsManager.GetBool(CapFpsSetting, false);
+        bool matchRefresh = SettingsManager.GetBool(MatchRefreshSetting, false);
+        int frameRate = GetConfiguredFrameRate();
+
+        if(!capFps)
+        {
+            CancelTargetFrameRateRefresh();
+            QualitySettings.vSyncCount = 0;
+            Application.targetFrameRate = -1;
+        }
+        else if(matchRefresh)
+        {
+            CancelTargetFrameRateRefresh();
+            QualitySettings.vSyncCount = 1;
+            Application.targetFrameRate = -1;
+        }
+        else
+        {
+            QualitySettings.vSyncCount = 0;
+            ApplyTargetFrameRate(frameRate, forceTargetFrameRateRefresh);
+        }
+    }
+
+
     public void UpdateGraphicsSettings(string setting)
     {
         bool allSettings = setting == "all";
 
-        if(allSettings || setting == "vsync" || setting == "framecap")
+        if(allSettings || setting == CapFpsSetting || setting == MatchRefreshSetting || setting == FpsLimitSetting)
         {
-            bool vsync = SettingsManager.GetBool("vsync", false);
-            QualitySettings.vSyncCount = vsync ? 1 : 0;
-            if(vsync)
-            {
-                Application.targetFrameRate = -1;
-            }
-            else
-            {
-                int framecap = SettingsManager.GetInt("framecap", false);
-
-                //Value of -1 uncaps the framerate
-                if(framecap <= 0 || framecap > 200) framecap = -1;
-
-                Application.targetFrameRate = framecap;
-            }
+            ApplyFrameLimiter(allSettings || setting == CapFpsSetting || setting == MatchRefreshSetting);
         }
 
 #if !UNITY_WEBGL || UNITY_EDITOR
@@ -160,5 +225,11 @@ public class GraphicSettingsUpdater : MonoBehaviour
         {
             UpdateGraphicsSettings("all");
         }
+    }
+
+
+    private void OnDestroy()
+    {
+        SettingsManager.OnSettingsUpdated -= UpdateGraphicsSettings;
     }
 }

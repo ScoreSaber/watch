@@ -86,14 +86,32 @@ public class SettingsSlider : MonoBehaviour
 
     private void CheckRequiredSetting(string changedSetting)
     {
+        if(rule == GraphicSettingsUpdater.FpsLimitSetting)
+        {
+            if(changedSetting == "all"
+                || changedSetting == GraphicSettingsUpdater.CapFpsSetting
+                || changedSetting == GraphicSettingsUpdater.MatchRefreshSetting)
+            {
+                SetInteractable(SettingsManager.GetBool(GraphicSettingsUpdater.CapFpsSetting, false)
+                    && !SettingsManager.GetBool(GraphicSettingsUpdater.MatchRefreshSetting, false));
+            }
+
+            return;
+        }
+
         SerializedOption<bool> option = requiredSetting.Value;
         if(changedSetting == "all" || changedSetting == option.Name)
         {
-            slider.interactable = option.Value == SettingsManager.GetBool(option.Name, false);
-            valueInput.interactable = slider.interactable;
-            Color textColor = slider.interactable ? enabledColor : disabledColor;
-            nameLabel.color = textColor;
+            SetInteractable(option.Value == SettingsManager.GetBool(option.Name, false));
         }
+    }
+
+
+    private void SetInteractable(bool interactable)
+    {
+        slider.interactable = interactable;
+        valueInput.interactable = interactable;
+        nameLabel.color = interactable ? enabledColor : disabledColor;
     }
     
 
