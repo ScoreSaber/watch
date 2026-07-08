@@ -50,7 +50,7 @@ public class SettingsSlider : MonoBehaviour
     {
         if(float.TryParse(value, out float number))
         {
-            number = Mathf.Clamp(number, minValue, maxValue);
+            number = ClampValue(number);
 
             if(integerValue)
             {
@@ -73,8 +73,14 @@ public class SettingsSlider : MonoBehaviour
         if(changedSetting == "all" || changedSetting == rule)
         {
             float newValue = integerValue ? SettingsManager.GetInt(rule, false) : SettingsManager.GetFloat(rule, false);
-            SetSliderValue(newValue);
-            UpdateText(newValue);
+            float clampedValue = ClampValue(newValue);
+            if(!Mathf.Approximately(newValue, clampedValue))
+            {
+                UpdateValue(clampedValue, false);
+            }
+
+            SetSliderValue(clampedValue);
+            UpdateText(clampedValue);
         }
 
         if(requiredSetting.Enabled)
@@ -115,19 +121,23 @@ public class SettingsSlider : MonoBehaviour
     }
     
 
-    private void UpdateValue(float value)
+    private void UpdateValue(float value, bool notify = true)
     {
+        value = ClampValue(value);
         if(integerValue)
         {
-            SettingsManager.SetRule(rule, Mathf.RoundToInt(value));
+            SettingsManager.SetRule(rule, Mathf.RoundToInt(value), notify);
         }
-        else SettingsManager.SetRule(rule, value);
+        else SettingsManager.SetRule(rule, value, notify);
     }
 
 
     private void UpdateText(float value)
     {
-        if(value > maxValue - 0.005 && maxOverride != "")
+        value = ClampValue(value);
+        float effectiveMaxValue = GetEffectiveMaxValue();
+
+        if(value > effectiveMaxValue - 0.005 && maxOverride != "")
         {
             valueInput.SetTextWithoutNotify(maxOverride);
         }
@@ -143,6 +153,7 @@ public class SettingsSlider : MonoBehaviour
 
     private void SetSliderValue(float value)
     {
+        value = ClampValue(value);
         if(!stepAmount.Enabled)
         {
             slider.SetValueWithoutNotify(value);
@@ -158,11 +169,30 @@ public class SettingsSlider : MonoBehaviour
     {
         if(!stepAmount.Enabled)
         {
-            return slider.value;
+            return ClampValue(slider.value);
         }
 
         float sliderValue = (slider.value * stepAmount.Value) + minValue;
-        return sliderValue;
+        return ClampValue(sliderValue);
+    }
+
+
+    private float ClampValue(float value)
+    {
+        return Mathf.Clamp(value, minValue, GetEffectiveMaxValue());
+    }
+
+
+    private float GetEffectiveMaxValue()
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        if(rule == GraphicSettingsUpdater.FpsLimitSetting)
+        {
+            return Mathf.Min(maxValue, SettingsManager.GetDisplayRefreshRate());
+        }
+#endif
+
+        return maxValue;
     }
 
 
@@ -186,7 +216,7 @@ public class SettingsSlider : MonoBehaviour
         {
             //Turn the slider into an integer slider, and convert the min and max
             //into an equivalent number of steps
-            float valueRange = maxValue - minValue;
+            float valueRange = GetEffectiveMaxValue() - minValue;
             int numSteps = (int)(valueRange / stepAmount.Value);
 
             slider.minValue = 0;
@@ -195,7 +225,7 @@ public class SettingsSlider : MonoBehaviour
         else
         {
             slider.minValue = minValue;
-            slider.maxValue = maxValue;
+            slider.maxValue = GetEffectiveMaxValue();
         }
 
         if(integerValue)

@@ -718,7 +718,7 @@ public class SettingsManager : MonoBehaviour
     }
 
 
-    private static int GetDisplayRefreshRate()
+    public static int GetDisplayRefreshRate()
     {
         int refreshRate = Mathf.RoundToInt((float)Screen.currentResolution.refreshRateRatio.value);
         return refreshRate > 0 ? Mathf.Clamp(refreshRate, 1, 999) : MobileDefaultFrameCap;

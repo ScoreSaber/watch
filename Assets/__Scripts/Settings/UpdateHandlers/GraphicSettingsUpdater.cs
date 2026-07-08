@@ -125,7 +125,17 @@ public class GraphicSettingsUpdater : MonoBehaviour
 
     private int GetConfiguredFrameRate()
     {
-        return Mathf.Clamp(SettingsManager.GetInt(FpsLimitSetting, false), 1, 999);
+        return Mathf.Clamp(SettingsManager.GetInt(FpsLimitSetting, false), 1, GetMaxConfiguredFrameRate());
+    }
+
+
+    private int GetMaxConfiguredFrameRate()
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return SettingsManager.GetDisplayRefreshRate();
+#else
+        return 999;
+#endif
     }
 
 
@@ -208,9 +218,15 @@ public class GraphicSettingsUpdater : MonoBehaviour
         }
         else if(matchRefresh)
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            CancelTargetFrameRateRefresh();
+            QualitySettings.vSyncCount = 0;
+            Application.targetFrameRate = -1;
+#else
             CancelTargetFrameRateRefresh();
             QualitySettings.vSyncCount = 1;
             Application.targetFrameRate = -1;
+#endif
         }
         else
         {
