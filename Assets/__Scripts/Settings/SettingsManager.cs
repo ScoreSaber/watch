@@ -50,7 +50,7 @@ public class SettingsManager : MonoBehaviour
 
     private static readonly Color OldUIColor = new Color(0.07058824f, 0.40784314f, 0.6313726f);
     private static readonly Color NewUIColor = new Color(0.67058825f, 0.5803922f, 0.04313726f);
-    private const int MobileDefaultFrameCap = 60;
+    private const int MobileDefaultFrameCap = 75;
     private const int CompactViewportWidth = 700;
     private const int CompactScreenWidth = 1100;
 #if UNITY_WEBGL && !UNITY_EDITOR
