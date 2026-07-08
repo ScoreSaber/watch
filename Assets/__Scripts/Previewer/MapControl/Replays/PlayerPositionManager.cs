@@ -195,7 +195,7 @@ public class PlayerPositionManager : MonoBehaviour
             else
             {
                 float timeDifference = newFrame.Time - lastCheckedFramerateTime;
-                if(timeDifference >= FpsDisplay.FramerateSampleTime)
+                if(timeDifference >= CurrentInfoPanel.FramerateSampleTime)
                 {
                     averageFramerate = totalFPS / checkedFrameCount;
 

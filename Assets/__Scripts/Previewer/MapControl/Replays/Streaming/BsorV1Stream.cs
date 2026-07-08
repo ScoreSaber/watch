@@ -62,7 +62,7 @@ public class BsorV1Stream : ReplayStreamingSocket
             else
             {
                 float timeDifference = newFrame.Time - lastCheckedFramerateTime;
-                if(timeDifference >= FpsDisplay.FramerateSampleTime)
+                if(timeDifference >= CurrentInfoPanel.FramerateSampleTime)
                 {
                     averageFramerate = totalFPS / checkedFrameCount;
 
