@@ -32,47 +32,9 @@ public class MapDirectoryInput : MonoBehaviour
     private TextMeshProUGUI placeholderText;
 
 
-    private string CombineArgument(string name, string value)
+    private static string CombineArgument(string name, string value)
     {
         return string.Join('=', name, value);
-    }
-
-
-    private List<string> ConvertBeatLeaderViewerParameters(List<KeyValuePair<string, string>> parameters)
-    {
-        List<string> convertedArgs = new List<string>();
-        foreach(KeyValuePair<string, string> pair in parameters)
-        {
-            string name = pair.Key;
-            string value = pair.Value;
-
-            string newName;
-            switch(name)
-            {
-                case "scoreId":
-                    newName = "scoreID";
-                    convertedArgs.Add(CombineArgument(newName, value));
-                    break;
-                case "link":
-                    newName = "replayURL";
-                    convertedArgs.Add(CombineArgument(newName, value));
-                    break;
-                case "mapLink":
-                    newName = "url";
-                    convertedArgs.Add(CombineArgument(newName, value));
-                    break;
-                case "time":
-                    newName = "t";
-                    if(int.TryParse(value, out int result))
-                    {
-                        //BL stores timestamps in ms, while ArcViewer uses seconds
-                        value = ((float)result / 1000).ToString();
-                        convertedArgs.Add(CombineArgument(newName, value));
-                    }
-                    break;
-            }
-        }
-        return convertedArgs;
     }
 
 
@@ -187,18 +149,11 @@ public class MapDirectoryInput : MonoBehaviour
             return;
         }
 
-        if(MapDirectory.StartsWith(UrlArgHandler.BeatLeaderViewerURL) || MapDirectory.StartsWith(UrlArgHandler.OldBeatLeaderViewerURL))
+        if(ReplaySources.BeatLeader.TryConvertLink(MapDirectory, out string convertedQuery))
         {
-            //Convert BeatLeader viewer links to ArcViewer parameters
-            string url = HttpUtility.UrlDecode(MapDirectory);
-
-            List<KeyValuePair<string, string>> parameters = UrlUtility.ParseUrlParams(url);
-            List<string> convertedArgs = ConvertBeatLeaderViewerParameters(parameters);
-
-            if(convertedArgs.Count > 0)
+            if(!string.IsNullOrEmpty(convertedQuery))
             {
-                string newQuery = string.Join('&', convertedArgs);
-                urlArgHandler.LoadMapFromShareableURL($"{UrlArgHandler.ArcViewerURL}?{newQuery}");
+                urlArgHandler.LoadMapFromShareableURL($"{UrlArgHandler.ArcViewerURL}?{convertedQuery}");
                 return;
             }
             else

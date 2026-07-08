@@ -6,6 +6,9 @@ using UnityEngine;
 
 public class BeatLeaderSource : ReplaySource
 {
+    private const string OldViewerURL = "https://replay.beatleader.xyz/";
+    private const string ViewerURL = "https://replay.beatleader.com/";
+
     public override ReplaySourceType SourceType => ReplaySourceType.BeatLeader;
     public override string Name => "BeatLeader";
     public override string[] InputPrefixes => new[] { "bl:", "beatleader:" };
@@ -27,7 +30,7 @@ public class BeatLeaderSource : ReplaySource
     public override bool TryConvertLink(string url, out string convertedQuery)
     {
         convertedQuery = null;
-        if(!url.StartsWith(UrlArgHandler.BeatLeaderViewerURL) && !url.StartsWith(UrlArgHandler.OldBeatLeaderViewerURL))
+        if(!url.StartsWith(ViewerURL) && !url.StartsWith(OldViewerURL))
         {
             return false;
         }
