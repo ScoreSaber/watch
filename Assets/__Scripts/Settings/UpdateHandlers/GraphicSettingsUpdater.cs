@@ -151,8 +151,6 @@ public class GraphicSettingsUpdater : MonoBehaviour
             && Time.unscaledTime >= activeFrameRateUntil
             && !TimeManager.Playing
             && !TimeManager.Scrubbing
-            && !ReplayManager.CurrentLiveViewingState.Active
-            && !ReplayManager.IsLiveReplay
             && !MapLoader.Loading
             && !HotReloader.Loading
             && !EnvironmentManager.Loading;
