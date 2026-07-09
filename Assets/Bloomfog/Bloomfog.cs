@@ -252,6 +252,8 @@ public class Bloomfog : ScriptableRendererFeature
             for(int i = 0; i < settings.actualDownsamplePasses; i++)
             {
                 cmd.GetTemporaryRT(tempIDs[i], settings.textureWidth / downsample, settings.textureHeight / downsample, 0, FilterMode.Bilinear, RenderTextureFormat.RGB111110Float);
+                cmd.SetRenderTarget(tempRTs[i]);
+                cmd.ClearRenderTarget(true, true, Color.black);
 
                 downsample *= 2;
             }
