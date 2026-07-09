@@ -5,7 +5,6 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using Assets.__Scripts.Loading.Replays.PP;
 
 public class ScoreManager : MonoBehaviour
 {
@@ -26,7 +25,6 @@ public class ScoreManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI gradeText;
     [SerializeField] private TextMeshProUGUI comboText;
     [SerializeField] private TextMeshProUGUI missText;
-    [SerializeField] private TextMeshProUGUI ppText;
 
     [Space]
     [SerializeField] private TextMeshProUGUI multiplierText;
@@ -87,7 +85,6 @@ public class ScoreManager : MonoBehaviour
         int misses = 0;
 
         int inferCount = 0;
-
         for(int i = 0; i < ScoringEvents.Count; i++)
         {
             ScoringEvent currentEvent = ScoringEvents[i];
@@ -476,7 +473,6 @@ public class ScoreManager : MonoBehaviour
         int currentComboMult;
         int currentComboProgress;
         int currentMisses;
-
         if(lastIndex >= 0)
         {
             ScoringEvent lastEvent = ScoringEvents[lastIndex];
@@ -504,7 +500,6 @@ public class ScoreManager : MonoBehaviour
 
         comboText.text = currentCombo.ToString();
         missText.text = currentMisses.ToString();
-        ppText.text = PPManager.CanCalculatePP() ? $"{PPManager.CalculatePP(currentPercentage / 100f, out string shorthand):F2}pp ({shorthand})" : "";
 
         float effectivePercentage = currentPercentage * ReplayManager.ModifierMult;
         if(ReplayManager.HasFailed)
@@ -580,7 +575,6 @@ public class ScoreManager : MonoBehaviour
         comboText.text = legacyCombo.ToString();
         missText.text = misses.ToString();
 
-        ppText.text = PPManager.CanCalculatePP() ? $"{PPManager.CalculatePP(percentage / 100f, out string shorthand):F2}pp ({shorthand})" : "";
         scorePercentageText.text = GetPercentageString(percentage);
         gradeText.text = GradeFromPercentage(percentage);
 
@@ -620,15 +614,6 @@ public class ScoreManager : MonoBehaviour
             if(IsScoreSaberLegacyReplay)
             {
                 ErrorHandler.Instance.ShowPopup(ErrorType.Warning, "This is a legacy ScoreSaber replay. Some data is synthesised and may not be fully accurate.");
-            }
-
-            bool showPP = SettingsManager.GetBool("showpp", true)
-                && ReplayManager.SourceInfo != null
-                && PPManager.CanCalculatePP();
-
-            if(ppText != null)
-            {
-                ppText.gameObject.SetActive(showPP);
             }
 
             foreach(NoteEvent noteEvent in ReplayManager.CurrentReplay.notes)
@@ -731,17 +716,6 @@ public class ScoreManager : MonoBehaviour
         {
             bool showFCPercentage = SettingsManager.GetBool("fcacc");
             fcPercentageText.gameObject.SetActive(showFCPercentage);
-        }
-
-        if(allSettings || setting == "showpp")
-        {
-            bool showPP = SettingsManager.GetBool("showpp", true)
-                && ReplayManager.SourceInfo != null
-                && PPManager.CanCalculatePP();
-            if(ppText != null)
-            {
-                ppText.gameObject.SetActive(showPP);
-            }
         }
     }
 
